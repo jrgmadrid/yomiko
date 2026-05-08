@@ -151,6 +151,20 @@ app.whenReady().then(async () => {
     }
   )
 
+  // Dev-only: bypass capture + stabilizer + dedupe. Take a PNG of a synthetic
+  // VN line, run it straight through the OCR backend, emit the result as a
+  // text:line so it flows through tokenize + JMdict + popup UI.
+  ipcMain.handle(Channels.devOcrTest, async (_event, png: ArrayBuffer): Promise<string> => {
+    const backend = pickOcrBackend()
+    if (!backend) throw new Error(`no OCR backend for platform ${process.platform}`)
+    const text = await backend.recognize(Buffer.from(png))
+    const trimmed = text.trim()
+    if (trimmed && overlay && !overlay.isDestroyed()) {
+      overlay.webContents.send(Channels.textLine, trimmed)
+    }
+    return trimmed
+  })
+
   overlay = createOverlayWindow()
 
   manualSource = new ManualPasteSource()

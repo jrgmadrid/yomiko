@@ -1,5 +1,52 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+
+interface DevRenderOptions {
+  fontSize?: number
+  width?: number
+  background?: string
+  color?: string
+}
+
+// Renders Japanese text to a PNG via an offscreen canvas — used by
+// devRenderAndOcr to feed a synthetic VN line through the real OCR
+// pipeline without needing screen capture.
+async function renderTextToPng(text: string, opts: DevRenderOptions = {}): Promise<ArrayBuffer> {
+  const fontSize = opts.fontSize ?? 32
+  const width = opts.width ?? 900
+  const padding = fontSize
+  const canvas = document.createElement('canvas')
+  // Estimate height: rough line count + padding.
+  const lineCount = Math.max(1, Math.ceil(text.length / Math.floor(width / fontSize)))
+  canvas.width = width
+  canvas.height = padding * 2 + fontSize * 1.5 * lineCount
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas 2d unavailable')
+  ctx.fillStyle = opts.background ?? '#0d1217'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = opts.color ?? '#f5f5f5'
+  ctx.font = `${fontSize}px "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif`
+  ctx.textBaseline = 'top'
+  // Naive word-wrap: just measure char-by-char.
+  let y = padding
+  let line = ''
+  for (const ch of text) {
+    const test = line + ch
+    if (ctx.measureText(test).width > width - padding * 2) {
+      ctx.fillText(line, padding, y)
+      y += fontSize * 1.5
+      line = ch
+    } else {
+      line = test
+    }
+  }
+  if (line) ctx.fillText(line, padding, y)
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob((b) => resolve(b), 'image/png')
+  )
+  if (!blob) throw new Error('canvas toBlob failed')
+  return blob.arrayBuffer()
+}
 import {
   Channels,
   type SourceStatus,
@@ -44,6 +91,13 @@ const vnr = {
   },
   setRegion: (windowName: string, region: SharedRegion): Promise<void> => {
     return ipcRenderer.invoke(Channels.regionsSet, { windowName, region })
+  },
+  devOcrTest: (png: ArrayBuffer): Promise<string> => {
+    return ipcRenderer.invoke(Channels.devOcrTest, png)
+  },
+  devRenderAndOcr: async (text: string, options?: DevRenderOptions): Promise<string> => {
+    const png = await renderTextToPng(text, options)
+    return ipcRenderer.invoke(Channels.devOcrTest, png)
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)
