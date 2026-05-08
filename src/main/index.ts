@@ -1,11 +1,13 @@
 import { app, ipcMain, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createOverlayWindow } from './window'
-import { Channels, type SetIgnorePayload } from '@shared/ipc'
+import { Channels, type SetIgnorePayload, type SharedWordGroup } from '@shared/ipc'
 import { config } from './config'
 import { TextSource } from './sources/types'
 import { ManualPasteSource } from './sources/ManualPasteSource'
 import { TextractorWSSource } from './sources/TextractorWSSource'
+import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
+import { groupTokens } from './tokenize/grouping'
 
 let overlay: BrowserWindow | null = null
 const sources: TextSource[] = []
@@ -36,6 +38,11 @@ app.whenReady().then(async () => {
     manualSource?.feed(line)
   })
 
+  ipcMain.handle(Channels.tokenizeLine, async (_event, line: string): Promise<SharedWordGroup[]> => {
+    const tokens = await tokenize(line)
+    return groupTokens(tokens)
+  })
+
   overlay = createOverlayWindow()
 
   manualSource = new ManualPasteSource()
@@ -47,6 +54,12 @@ app.whenReady().then(async () => {
   bindSource(wsSource)
   await wsSource.start()
   sources.push(wsSource)
+
+  // Warm the kuromoji dict in the background — first line shouldn't pay the
+  // ~150ms init cost.
+  preloadTokenizer().catch((err) => {
+    console.error('tokenizer preload failed:', err)
+  })
 
   app.on('activate', () => {
     if (!overlay || overlay.isDestroyed()) {

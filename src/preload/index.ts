@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { Channels, type SourceStatus } from '@shared/ipc'
+import { Channels, type SourceStatus, type SharedWordGroup } from '@shared/ipc'
 
 const vnr = {
   setIgnoreMouseEvents: (ignore: boolean): void => {
@@ -8,6 +8,9 @@ const vnr = {
   },
   devPaste: (line: string): void => {
     ipcRenderer.send(Channels.devPaste, line)
+  },
+  tokenize: (line: string): Promise<SharedWordGroup[]> => {
+    return ipcRenderer.invoke(Channels.tokenizeLine, line)
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)
