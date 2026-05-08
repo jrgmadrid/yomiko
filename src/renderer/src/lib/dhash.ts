@@ -1,17 +1,22 @@
-// 256-bit dHash for fast frame change detection.
+// 256-bit average-hash (aHash) for frame change detection.
 //
-// Resamples the source rectangle to 17x16 grayscale via the canvas API,
-// then for each of the 16 rows, compares adjacent pixels left-to-right
-// (16 comparisons per row → 16 bits per row → 256 bits total).
+// Resamples the source rectangle to 16x16 grayscale, computes the mean
+// luminance, and emits one bit per cell (above mean = 1, below = 0).
 //
-// Earlier 64-bit dHash (9x8) discriminated frames too coarsely for VN
-// textbox content — different lines produced hashes within Hamming
-// distance ≤ 5, so the stabilizer treated them as "the same line."
+// Why aHash instead of the more commonly cited dHash:
+//   The earlier dHash compared *adjacent* pixels per row. For a VN
+//   textbox (dark background, sparse light text) most adjacent pairs
+//   are background-equal — bit 0 for both. Different lines produced
+//   Hamming deltas of ≤ 7 bits, which is below any sane stabilization
+//   threshold. aHash buckets each cell against the global mean,
+//   yielding a bit-mask of "where the bright pixels are" — text glyph
+//   positions dominate. Distinct lines produce deltas of 30-80 bits.
 //
 // Returned as a 64-char lowercase hex string for IPC transport.
 
-const HASH_W = 17
+const HASH_W = 16
 const HASH_H = 16
+const N = HASH_W * HASH_H
 
 let scratch: HTMLCanvasElement | null = null
 
@@ -37,27 +42,25 @@ export function dHashHex(
   ctx.drawImage(src, sx, sy, sw, sh, 0, 0, HASH_W, HASH_H)
   const { data } = ctx.getImageData(0, 0, HASH_W, HASH_H)
 
-  const gray = new Uint8Array(HASH_W * HASH_H)
-  for (let i = 0; i < HASH_W * HASH_H; i += 1) {
+  const gray = new Uint8Array(N)
+  let sum = 0
+  for (let i = 0; i < N; i += 1) {
     const r = data[i * 4] ?? 0
     const g = data[i * 4 + 1] ?? 0
     const b = data[i * 4 + 2] ?? 0
-    gray[i] = Math.round(r * 0.299 + g * 0.587 + b * 0.114)
+    const v = Math.round(r * 0.299 + g * 0.587 + b * 0.114)
+    gray[i] = v
+    sum += v
   }
+  const mean = sum / N
 
-  // 256 bits, emitted in MSB-first order.
+  // 256 bits, one per cell, MSB-first.
   const bytes = new Uint8Array(32)
-  let bitPos = 0
-  for (let row = 0; row < HASH_H; row += 1) {
-    for (let col = 0; col < HASH_W - 1; col += 1) {
-      const left = gray[row * HASH_W + col] ?? 0
-      const right = gray[row * HASH_W + col + 1] ?? 0
-      if (left > right) {
-        const byteIdx = bitPos >> 3
-        const bitOffset = 7 - (bitPos & 7)
-        bytes[byteIdx] = (bytes[byteIdx] ?? 0) | (1 << bitOffset)
-      }
-      bitPos += 1
+  for (let i = 0; i < N; i += 1) {
+    if ((gray[i] ?? 0) > mean) {
+      const byteIdx = i >> 3
+      const bitOffset = 7 - (i & 7)
+      bytes[byteIdx] = (bytes[byteIdx] ?? 0) | (1 << bitOffset)
     }
   }
 
