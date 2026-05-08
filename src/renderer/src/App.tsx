@@ -104,8 +104,8 @@ function App(): React.JSX.Element {
   return (
     <>
       <div className="flex h-full w-full flex-col items-center justify-end p-6">
-        <div className="hit flex max-w-[92%] flex-col gap-2 rounded-xl border border-white/5 bg-black/75 px-6 py-4 shadow-2xl backdrop-blur">
-          <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-widest text-white/40">
+        <div className="hit flex max-h-[85vh] max-w-[92%] flex-col gap-2 overflow-hidden rounded-xl border border-white/5 bg-black/75 px-6 py-4 shadow-2xl backdrop-blur">
+          <div className="flex shrink-0 items-center justify-between gap-3 text-[10px] uppercase tracking-widest text-white/40">
             <div className="flex items-center gap-2">
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${pipColor(status, activeSource)}`}
@@ -120,22 +120,24 @@ function App(): React.JSX.Element {
               {activeSource ? 'change source' : 'select source'}
             </button>
           </div>
-          {lines.length === 0 ? (
-            <div className="text-base text-white/50">
-              {activeSource
-                ? `Watching ${activeSource.name} — waiting for text`
-                : 'Click "select source" to pick a VN window'}
-            </div>
-          ) : (
-            lines.map((line) => (
-              <TokenLine
-                key={line.id}
-                groups={line.groups}
-                onHover={onHover}
-                onLeave={onLeave}
-              />
-            ))
-          )}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {lines.length === 0 ? (
+              <div className="text-base text-white/50">
+                {activeSource
+                  ? `Watching ${activeSource.name} — waiting for text`
+                  : 'Click "select source" to pick a VN window'}
+              </div>
+            ) : (
+              lines.map((line) => (
+                <TokenLine
+                  key={line.id}
+                  groups={line.groups}
+                  onHover={onHover}
+                  onLeave={onLeave}
+                />
+              ))
+            )}
+          </div>
         </div>
         {lookup && hoveredAnchor && <Popup data={lookup} anchor={hoveredAnchor} />}
       </div>

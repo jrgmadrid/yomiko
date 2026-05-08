@@ -83,8 +83,8 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-8">
-      <div className="hit max-w-3xl rounded-xl border border-white/10 bg-black/95 p-5 shadow-2xl backdrop-blur">
-        <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="hit flex max-h-[calc(100vh-4rem)] max-w-3xl flex-col overflow-hidden rounded-xl border border-white/10 bg-black/95 p-5 shadow-2xl backdrop-blur">
+        <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
           <h2 className="text-base font-medium tracking-wide text-white">
             {step === 'list' ? 'Select VN window' : `${selected?.name}`}
           </h2>
@@ -109,45 +109,47 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
         </div>
 
         {error && (
-          <div className="mb-3 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+          <div className="mb-3 shrink-0 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
           </div>
         )}
 
-        {step === 'list' &&
-          (windows.length === 0 ? (
-            <div className="text-sm text-white/60">
-              Looking for windows… (macOS will prompt for Screen Recording
-              access on first run; allow it and click Cancel + Select again.)
-            </div>
-          ) : (
-            <div className="grid max-h-[60vh] grid-cols-3 gap-3 overflow-y-auto pr-1">
-              {windows.map((w) => (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => handlePickWindow(w)}
-                  className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 p-2 text-left hover:bg-white/10"
-                >
-                  <img
-                    src={w.thumbnailDataUrl}
-                    alt={w.name}
-                    className="aspect-video w-full rounded-md bg-black object-contain"
-                  />
-                  <div className="line-clamp-2 text-xs text-white/80">{w.name}</div>
-                </button>
-              ))}
-            </div>
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {step === 'list' &&
+            (windows.length === 0 ? (
+              <div className="text-sm text-white/60">
+                Looking for windows… (macOS will prompt for Screen Recording
+                access on first run; allow it and click Cancel + Select again.)
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 pr-1">
+                {windows.map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => handlePickWindow(w)}
+                    className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 p-2 text-left hover:bg-white/10"
+                  >
+                    <img
+                      src={w.thumbnailDataUrl}
+                      alt={w.name}
+                      className="aspect-video w-full rounded-md bg-black object-contain"
+                    />
+                    <div className="line-clamp-2 text-xs text-white/80">{w.name}</div>
+                  </button>
+                ))}
+              </div>
+            ))}
 
-        {step === 'region' && (
-          <RegionSelector
-            frame={frame}
-            initialRegion={null}
-            onConfirm={handleConfirmRegion}
-            onCancel={handleBack}
-          />
-        )}
+          {step === 'region' && (
+            <RegionSelector
+              frame={frame}
+              initialRegion={null}
+              onConfirm={handleConfirmRegion}
+              onCancel={handleBack}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
