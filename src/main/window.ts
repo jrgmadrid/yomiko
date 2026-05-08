@@ -1,23 +1,21 @@
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { config } from './config'
 
 export function createOverlayWindow(): BrowserWindow {
   const display = screen.getPrimaryDisplay()
   const { width: dw, height: dh } = display.workAreaSize
   const { x: dx, y: dy } = display.workArea
 
-  const width = Math.min(config.overlay.width, dw)
-  const height = config.overlay.height
-  const x = dx + Math.round((dw - width) / 2)
-  const y = config.overlay.position === 'bottom' ? dy + dh - height : dy
-
+  // The window covers the full work area. The renderer keeps actual content
+  // (text bar, popups) inside this canvas — the BrowserWindow is large so
+  // popups can render *above* the bar without being clipped at the window
+  // boundary. Everything else is transparent and click-through.
   const win = new BrowserWindow({
-    x,
-    y,
-    width,
-    height,
+    x: dx,
+    y: dy,
+    width: dw,
+    height: dh,
     show: false,
     transparent: true,
     frame: false,
