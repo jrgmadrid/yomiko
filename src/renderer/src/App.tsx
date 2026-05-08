@@ -1,9 +1,16 @@
+import { useEffect } from 'react'
+import { attachClickThrough } from './lib/clickthrough'
+
 function App(): React.JSX.Element {
+  useEffect(() => attachClickThrough(), [])
+
   return (
-    <div className="flex h-full w-full items-center justify-center">
-      <span className="rounded-md bg-black/60 px-3 py-1 text-sm tracking-wide backdrop-blur">
-        yomiko · ship 1
-      </span>
+    <div className="flex h-full w-full items-end justify-center pb-6">
+      <div className="hit rounded-lg bg-black/70 px-6 py-3 backdrop-blur">
+        <span className="text-base tracking-wide text-white/90">
+          yomiko · ship 1 · placeholder bar
+        </span>
+      </div>
     </div>
   )
 }
