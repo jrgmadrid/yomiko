@@ -43,20 +43,27 @@ export class OCRSource extends TextSource {
     if (!this.hasReceivedFrame) {
       this.hasReceivedFrame = true
       this.emit('status', 'connected')
+      console.log('[ocr-source] first frame received, hash=', payload.hash.slice(0, 12))
     }
 
     const event = this.stabilizer.observe(payload.hash, payload.ts)
     if (event.type !== 'fire') return
 
-    // Cap concurrency at 1 — running two OCR requests in parallel against
-    // the sidecar would race on the queue and produce shuffled results.
     if (this.inFlight > 0) return
     this.inFlight += 1
+    console.log('[ocr-source] firing OCR; bytes=', payload.data.byteLength, 'hash=', payload.hash.slice(0, 12))
     try {
       const text = await this.backend.recognize(Buffer.from(payload.data))
       const trimmed = text.trim()
-      if (trimmed && this.deduper.shouldEmit(trimmed)) {
+      if (!trimmed) {
+        console.log('[ocr-source] empty OCR result')
+        return
+      }
+      if (this.deduper.shouldEmit(trimmed)) {
+        console.log('[ocr-source] emit:', trimmed)
         this.emit('text', trimmed)
+      } else {
+        console.log('[ocr-source] dedupe suppressed:', trimmed)
       }
     } catch (err) {
       console.error('[ocr-source] recognize failed:', (err as Error).message)

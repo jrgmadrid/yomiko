@@ -22,7 +22,10 @@ function h(seed: number, perturbBits = 0): string {
   const base = BigInt(seed) * 0x1234567812345678n
   let bits = base & 0xffffffffffffffffn
   for (let i = 0; i < perturbBits; i += 1) bits ^= 1n << BigInt(i)
-  return bits.toString(16).padStart(16, '0').slice(-16)
+  // Replicate to fill 64 hex chars (256 bits) so we exercise the new hash size.
+  let hex = bits.toString(16).padStart(16, '0').slice(-16)
+  while (hex.length < 64) hex += hex
+  return hex.slice(0, 64)
 }
 
 // Frame timeline: static empty box, dialog rolls in over 600ms, settles for

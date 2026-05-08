@@ -23,8 +23,12 @@ export interface StabilizerConfig {
   hardIntervalMs: number
 }
 
+// Thresholds calibrated for the 256-bit dHash (17x16). Hamming ≤ 20
+// (~8%) treats two frames as "the same line"; any meaningful text
+// change exceeds this. stabilizationMs lets typewriter rollouts settle
+// before we OCR. hardIntervalMs caps re-OCRing the same bucket.
 export const DEFAULT_STABILIZER_CONFIG: StabilizerConfig = {
-  changeThreshold: 5,
+  changeThreshold: 20,
   stabilizationMs: 350,
   hardIntervalMs: 800
 }
