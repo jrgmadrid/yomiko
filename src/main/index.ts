@@ -10,10 +10,18 @@ import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
 import { lookupGroup } from './dict/deinflect'
+import { listWindows } from './capture/picker'
+import {
+  configureDisplayMediaHandler,
+  setPendingSource,
+  clearPendingSource
+} from './capture/stream'
 import type {
+  CaptureFramePayload,
   SharedJmdictEntry,
   SharedJmdictSense,
   SharedLookupResult,
+  SharedWindowSource,
   SharedWordGroup
 } from '@shared/ipc'
 
@@ -85,6 +93,26 @@ app.whenReady().then(async () => {
       }
     }
   )
+
+  configureDisplayMediaHandler()
+
+  ipcMain.handle(Channels.captureListWindows, async (): Promise<SharedWindowSource[]> => {
+    return listWindows()
+  })
+
+  ipcMain.on(Channels.captureSetSource, (_event, sourceId: string) => {
+    setPendingSource(sourceId)
+  })
+
+  ipcMain.on(Channels.captureStop, () => {
+    clearPendingSource()
+  })
+
+  ipcMain.on(Channels.captureFrame, (_event, payload: CaptureFramePayload) => {
+    // S2.1 placeholder — diff/stabilize/OCR pipeline lands in S2.3+.
+    // For now, just confirm frames are arriving from the renderer.
+    void payload
+  })
 
   overlay = createOverlayWindow()
 

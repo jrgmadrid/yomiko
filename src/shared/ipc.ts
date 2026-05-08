@@ -5,7 +5,14 @@ export const Channels = {
   devPaste: 'dev:paste',
   tokenizeLine: 'tokenize:line',
   dictLookup: 'dict:lookup',
-  dictLookupWithDeinflect: 'dict:lookup-with-deinflect'
+  dictLookupWithDeinflect: 'dict:lookup-with-deinflect',
+  captureListWindows: 'capture:list-windows',
+  captureSetSource: 'capture:set-source',
+  captureFrame: 'capture:frame',
+  captureStop: 'capture:stop',
+  captureStatus: 'capture:status',
+  regionsGet: 'regions:get',
+  regionsSet: 'regions:set'
 } as const
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
@@ -67,4 +74,25 @@ export interface SharedLookupResult {
   matched: string
   chain: SharedDeinflectionStep[]
   entries: SharedJmdictEntry[]
+}
+
+export interface SharedWindowSource {
+  id: string
+  name: string
+  thumbnailDataUrl: string
+}
+
+export interface SharedRegion {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export type CaptureStatus = 'idle' | 'starting' | 'streaming' | 'error'
+
+export interface CaptureFramePayload {
+  data: ArrayBuffer
+  region: SharedRegion
+  ts: number
 }

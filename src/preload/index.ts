@@ -5,7 +5,9 @@ import {
   type SourceStatus,
   type SharedWordGroup,
   type SharedJmdictEntry,
-  type SharedLookupResult
+  type SharedLookupResult,
+  type SharedWindowSource,
+  type CaptureFramePayload
 } from '@shared/ipc'
 
 const vnr = {
@@ -23,6 +25,18 @@ const vnr = {
   },
   lookupGroup: (group: SharedWordGroup): Promise<SharedLookupResult> => {
     return ipcRenderer.invoke(Channels.dictLookupWithDeinflect, group)
+  },
+  listWindows: (): Promise<SharedWindowSource[]> => {
+    return ipcRenderer.invoke(Channels.captureListWindows)
+  },
+  setSource: (sourceId: string): void => {
+    ipcRenderer.send(Channels.captureSetSource, sourceId)
+  },
+  stopCapture: (): void => {
+    ipcRenderer.send(Channels.captureStop)
+  },
+  captureFrame: (payload: CaptureFramePayload): void => {
+    ipcRenderer.send(Channels.captureFrame, payload)
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)

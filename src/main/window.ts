@@ -36,6 +36,12 @@ export function createOverlayWindow(): BrowserWindow {
 
   win.setAlwaysOnTop(true, 'screen-saver')
 
+  // Don't let our overlay show up inside its own captured frames when the
+  // user picks "entire screen" or another window we happen to overlap.
+  // Win10 2004+ → WDA_EXCLUDEFROMCAPTURE (clean). macOS implementation has
+  // been buggy through 2025; cosmetic only since we pick specific windows.
+  win.setContentProtection(true)
+
   if (process.platform === 'darwin') {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   }

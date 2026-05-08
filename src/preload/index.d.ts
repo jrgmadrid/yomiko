@@ -3,7 +3,9 @@ import {
   SourceStatus,
   SharedWordGroup,
   SharedJmdictEntry,
-  SharedLookupResult
+  SharedLookupResult,
+  SharedWindowSource,
+  CaptureFramePayload
 } from '@shared/ipc'
 
 export interface VnrApi {
@@ -12,6 +14,10 @@ export interface VnrApi {
   tokenize: (line: string) => Promise<SharedWordGroup[]>
   lookup: (form: string) => Promise<SharedJmdictEntry[]>
   lookupGroup: (group: SharedWordGroup) => Promise<SharedLookupResult>
+  listWindows: () => Promise<SharedWindowSource[]>
+  setSource: (sourceId: string) => void
+  stopCapture: () => void
+  captureFrame: (payload: CaptureFramePayload) => void
   onLine: (cb: (line: string) => void) => () => void
   onStatus: (cb: (s: SourceStatus) => void) => () => void
 }
