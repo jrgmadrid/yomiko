@@ -11,6 +11,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "setup": "tsx scripts/setup.ts",
     "build:dict": "tsx scripts/build-dict.ts",
+    "build:sidecar:mac": "bash vendor/macos-vision-ocr/build.sh",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
