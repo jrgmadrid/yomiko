@@ -12,6 +12,7 @@
     "setup": "tsx scripts/setup.ts",
     "build:dict": "tsx scripts/build-dict.ts",
     "build:sidecar:mac": "bash vendor/macos-vision-ocr/build.sh",
+    "build:sidecars": "node -e \"const p=process.platform;if(p==='darwin')require('child_process').execSync('npm run build:sidecar:mac',{stdio:'inherit'});else if(p==='win32')console.log('Win sidecar build TBD — see vendor/windows-media-ocr/build.ps1');else console.log('No sidecar for platform '+p)\"",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
