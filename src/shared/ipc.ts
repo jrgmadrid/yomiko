@@ -14,11 +14,7 @@ export const Channels = {
   regionsGet: 'regions:get',
   regionsSet: 'regions:set',
   devOcrTest: 'dev:ocr-test',
-  devOpenTestVN: 'dev:open-test-vn',
-  popupShow: 'popup:show',
-  popupHide: 'popup:hide',
-  popupData: 'popup:data',
-  overlaySetMode: 'overlay:set-mode'
+  devOpenTestVN: 'dev:open-test-vn'
 } as const
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
@@ -103,18 +99,4 @@ export interface CaptureFramePayload {
   ts: number
   /** 64-bit dHash of the cropped frame as a 16-char lowercase hex string. */
   hash: string
-}
-
-export type OverlayMode = 'bar' | 'picker'
-
-export interface PopupShowPayload {
-  /** Screen-relative cursor X (px). */
-  screenX: number
-  /** Screen-relative cursor Y (px). */
-  screenY: number
-  /** Hovered token's screen-rect top edge (for "anchor above" calculation). */
-  anchorTop: number
-  /** Hovered token's screen-rect bottom edge (for "anchor below" fallback). */
-  anchorBottom: number
-  data: SharedLookupResult
 }

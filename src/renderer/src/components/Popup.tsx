@@ -1,7 +1,14 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { SharedLookupResult, SharedJmdictEntry } from '@shared/ipc'
 
 interface Props {
   data: SharedLookupResult
+  anchor: HTMLElement
+}
+
+interface Position {
+  left: number
+  top: number
 }
 
 const MAX_ENTRIES = 3
@@ -15,16 +22,47 @@ function headlineForm(entry: SharedJmdictEntry): string {
   return entry.kanji[0]?.text ?? entry.kana[0]?.text ?? '?'
 }
 
-// Renders the popup body. Used inside the dedicated popup BrowserWindow
-// (positioned by main relative to the hovered token's screen rect), so this
-// component is positioning-agnostic — it just fills its container.
-export function Popup({ data }: Props): React.JSX.Element | null {
+export function Popup({ data, anchor }: Props): React.JSX.Element | null {
+  const popupRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<Position | null>(null)
+
+  useLayoutEffect(() => {
+    if (!popupRef.current) return
+    const rect = anchor.getBoundingClientRect()
+    const popupRect = popupRef.current.getBoundingClientRect()
+    const margin = 8
+
+    let left = rect.left
+    let top = rect.top - popupRect.height - margin
+
+    // Clamp horizontally to viewport
+    if (left + popupRect.width > window.innerWidth - margin) {
+      left = window.innerWidth - popupRect.width - margin
+    }
+    if (left < margin) left = margin
+
+    // If not enough room above, flip below the anchor
+    if (top < margin) {
+      top = rect.bottom + margin
+    }
+
+    setPos({ left, top })
+  }, [anchor, data])
+
   if (data.entries.length === 0) return null
 
   const entries = data.entries.slice(0, MAX_ENTRIES)
 
   return (
-    <div className="pointer-events-none m-2 rounded-lg border border-white/10 bg-black/95 p-4 shadow-2xl backdrop-blur-md">
+    <div
+      ref={popupRef}
+      className="pointer-events-none absolute z-50 min-w-[18rem] max-w-md rounded-lg border border-white/10 bg-black/95 p-4 shadow-2xl backdrop-blur-md"
+      style={{
+        left: pos?.left ?? -9999,
+        top: pos?.top ?? -9999,
+        opacity: pos ? 1 : 0
+      }}
+    >
       {entries.map((entry, i) => (
         <div key={entry.id} className={i > 0 ? 'mt-3 border-t border-white/10 pt-3' : ''}>
           <div className="flex items-baseline gap-3">

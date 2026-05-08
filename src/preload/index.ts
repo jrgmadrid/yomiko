@@ -55,9 +55,7 @@ import {
   type SharedLookupResult,
   type SharedWindowSource,
   type SharedRegion,
-  type CaptureFramePayload,
-  type OverlayMode,
-  type PopupShowPayload
+  type CaptureFramePayload
 } from '@shared/ipc'
 
 const vnr = {
@@ -103,15 +101,6 @@ const vnr = {
   },
   openTestVN: (): void => {
     ipcRenderer.send(Channels.devOpenTestVN)
-  },
-  popupShow: (payload: PopupShowPayload): void => {
-    ipcRenderer.send(Channels.popupShow, payload)
-  },
-  popupHide: (): void => {
-    ipcRenderer.send(Channels.popupHide)
-  },
-  setOverlayMode: (mode: OverlayMode): void => {
-    ipcRenderer.send(Channels.overlaySetMode, mode)
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)
