@@ -1,7 +1,14 @@
-import { app, ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow, screen } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { createOverlayWindow } from './window'
-import { Channels, type SetIgnorePayload } from '@shared/ipc'
+import { createOverlayWindow, createPopupWindow } from './window'
+import { Channels, type PopupShowPayload, type SetIgnorePayload } from '@shared/ipc'
+
+// Defense in depth against Chromium's NativeWindowOcclusionTracker pausing
+// the captured target's compositor. The architectural fix (overlay shrunk
+// to a bottom strip) already structurally avoids the problem, but future
+// Chromium heuristics could regress; this flag is a one-line guarantee.
+// Must run before app.whenReady().
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 import { TextSource } from './sources/types'
 import { ManualPasteSource } from './sources/ManualPasteSource'
 import { OCRSource } from './sources/OCRSource'
@@ -30,9 +37,54 @@ import type {
 } from '@shared/ipc'
 
 let overlay: BrowserWindow | null = null
+let popup: BrowserWindow | null = null
 const sources: TextSource[] = []
 let manualSource: ManualPasteSource | null = null
 let ocrSource: OCRSource | null = null
+
+const POPUP_WIDTH = 380
+const POPUP_HEIGHT = 240
+const POPUP_MARGIN = 10
+
+function getOrCreatePopup(): BrowserWindow {
+  if (popup && !popup.isDestroyed()) return popup
+  popup = createPopupWindow()
+  return popup
+}
+
+function placeAndShowPopup(payload: PopupShowPayload): void {
+  const win = getOrCreatePopup()
+  const display = screen.getDisplayMatching({
+    x: Math.round(payload.screenX),
+    y: Math.round(payload.screenY),
+    width: 1,
+    height: 1
+  })
+  const work = display.workArea
+
+  let x = Math.round(payload.screenX)
+  let y = Math.round(payload.anchorTop) - POPUP_HEIGHT - POPUP_MARGIN
+
+  // Flip below the anchor if there's no room above.
+  if (y < work.y + POPUP_MARGIN) {
+    y = Math.round(payload.anchorBottom) + POPUP_MARGIN
+  }
+  // Clamp horizontally to the active display.
+  if (x + POPUP_WIDTH > work.x + work.width - POPUP_MARGIN) {
+    x = work.x + work.width - POPUP_WIDTH - POPUP_MARGIN
+  }
+  if (x < work.x + POPUP_MARGIN) x = work.x + POPUP_MARGIN
+
+  win.setBounds({ x, y, width: POPUP_WIDTH, height: POPUP_HEIGHT })
+  win.webContents.send(Channels.popupData, payload.data)
+  if (!win.isVisible()) win.showInactive()
+}
+
+function hidePopup(): void {
+  if (popup && !popup.isDestroyed() && popup.isVisible()) {
+    popup.hide()
+  }
+}
 
 function pickOcrBackend(): OcrBackend | null {
   if (process.platform === 'darwin') return new AppleVisionBackend()
@@ -151,6 +203,14 @@ app.whenReady().then(async () => {
     }
   )
 
+  ipcMain.on(Channels.popupShow, (_event, payload: PopupShowPayload) => {
+    placeAndShowPopup(payload)
+  })
+
+  ipcMain.on(Channels.popupHide, () => {
+    hidePopup()
+  })
+
   // Dev-only: bypass capture + stabilizer + dedupe. Take a PNG of a synthetic
   // VN line, run it straight through the OCR backend, emit the result as a
   // text:line so it flows through tokenize + JMdict + popup UI.
@@ -200,6 +260,8 @@ app.whenReady().then(async () => {
   })
 
   overlay = createOverlayWindow()
+  // Pre-create the popup window so first hover doesn't pay the load cost.
+  getOrCreatePopup()
 
   manualSource = new ManualPasteSource()
   bindSource(manualSource)

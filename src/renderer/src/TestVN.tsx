@@ -16,24 +16,9 @@ const LINES = [
 export default function TestVN(): React.JSX.Element {
   const [idx, setIdx] = useState(0)
   const [auto, setAuto] = useState(false)
-  // Heartbeat: forces a re-render every animation frame so the window
-  // keeps repainting even when fully occluded by the yomiko overlay.
-  // Without this, macOS compositor throttles the test window and capture
-  // sees stale pixels until the user interacts (e.g. highlights text).
-  const [, setHeartbeat] = useState(0)
 
   useEffect(() => {
     document.title = 'Test VN'
-  }, [])
-
-  useEffect(() => {
-    let raf = 0
-    const tick = (): void => {
-      setHeartbeat((n) => (n + 1) % 1_000_000)
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
   }, [])
 
   useEffect(() => {

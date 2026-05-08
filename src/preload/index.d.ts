@@ -6,7 +6,8 @@ import {
   SharedLookupResult,
   SharedWindowSource,
   SharedRegion,
-  CaptureFramePayload
+  CaptureFramePayload,
+  PopupShowPayload
 } from '@shared/ipc'
 
 export interface DevRenderOptions {
@@ -31,6 +32,8 @@ export interface VnrApi {
   devOcrTest: (png: ArrayBuffer) => Promise<string>
   devRenderAndOcr: (text: string, options?: DevRenderOptions) => Promise<string>
   openTestVN: () => void
+  popupShow: (payload: PopupShowPayload) => void
+  popupHide: () => void
   onLine: (cb: (line: string) => void) => () => void
   onStatus: (cb: (s: SourceStatus) => void) => () => void
 }

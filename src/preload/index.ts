@@ -55,7 +55,8 @@ import {
   type SharedLookupResult,
   type SharedWindowSource,
   type SharedRegion,
-  type CaptureFramePayload
+  type CaptureFramePayload,
+  type PopupShowPayload
 } from '@shared/ipc'
 
 const vnr = {
@@ -101,6 +102,12 @@ const vnr = {
   },
   openTestVN: (): void => {
     ipcRenderer.send(Channels.devOpenTestVN)
+  },
+  popupShow: (payload: PopupShowPayload): void => {
+    ipcRenderer.send(Channels.popupShow, payload)
+  },
+  popupHide: (): void => {
+    ipcRenderer.send(Channels.popupHide)
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)
