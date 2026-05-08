@@ -33,7 +33,8 @@ import { listWindows } from './capture/picker'
 import {
   configureDisplayMediaHandler,
   setPendingSource,
-  clearPendingSource
+  clearPendingSource,
+  getPendingSource as pendingSourceId
 } from './capture/stream'
 import { getRegion, setRegion } from './storage/regions'
 import type {
@@ -94,6 +95,79 @@ function hidePopup(): void {
   if (popup && !popup.isDestroyed() && popup.isVisible()) {
     popup.hide()
   }
+}
+
+// ===== Test VN capturePage path =====
+//
+// macOS ScreenCaptureKit (used by Electron 39's getDisplayMedia on macOS
+// 14.4+) throttles frame delivery for windows that aren't being directly
+// interacted with. Our test fixture is an Electron-owned BrowserWindow that
+// goes idle between user clicks — its content updates visibly, but the
+// capture stream stays stale until the user does something like dragging
+// to highlight text inside the window.
+//
+// For windows we own, webContents.capturePage() pulls a fresh image from
+// Chromium's compositor on demand. We poll it at 5fps, crop to the user's
+// region, and feed the result straight through the OCR backend +
+// in-process dedupe. This bypasses ScreenCaptureKit entirely for the test
+// rig. Real (third-party) VNs render continuously and don't trip the
+// throttle, so they keep using the standard getDisplayMedia path.
+
+let testVnWindow: BrowserWindow | null = null
+let testVnPoll: NodeJS.Timeout | null = null
+let testVnRegion: SharedRegion | null = null
+let testVnInFlight = false
+let testVnLastEmit = ''
+
+async function pollTestVnFrame(): Promise<void> {
+  if (testVnInFlight) return
+  if (!testVnWindow || testVnWindow.isDestroyed() || !testVnRegion) return
+  testVnInFlight = true
+  try {
+    const img = await testVnWindow.webContents.capturePage()
+    const r = testVnRegion
+    if (!r) return
+    const cropped = img.crop({ x: r.x, y: r.y, width: r.w, height: r.h })
+    if (cropped.isEmpty()) return
+    const png = cropped.toPNG()
+    const backend = getOrCreateOcrBackend()
+    if (!backend) return
+    const text = (await backend.recognize(png)).trim()
+    if (text && text !== testVnLastEmit) {
+      testVnLastEmit = text
+      console.log('[test-vn] emit:', text)
+      overlay?.webContents.send(Channels.textLine, text)
+    }
+  } catch (err) {
+    console.error('[test-vn poll] failed:', (err as Error).message)
+  } finally {
+    testVnInFlight = false
+  }
+}
+
+function startTestVnPoll(region: SharedRegion): void {
+  testVnRegion = region
+  testVnLastEmit = ''
+  if (testVnPoll) return
+  console.log('[test-vn] capturePage poll starting at 5fps')
+  testVnPoll = setInterval(pollTestVnFrame, 200)
+}
+
+function stopTestVnPoll(): void {
+  if (testVnPoll) {
+    clearInterval(testVnPoll)
+    testVnPoll = null
+    console.log('[test-vn] capturePage poll stopped')
+  }
+  testVnRegion = null
+  testVnLastEmit = ''
+}
+
+let _ocrBackendCache: OcrBackend | null = null
+function getOrCreateOcrBackend(): OcrBackend | null {
+  if (_ocrBackendCache) return _ocrBackendCache
+  _ocrBackendCache = pickOcrBackend()
+  return _ocrBackendCache
 }
 
 function pickOcrBackend(): OcrBackend | null {
@@ -193,6 +267,7 @@ app.whenReady().then(async () => {
 
   ipcMain.on(Channels.captureStop, () => {
     clearPendingSource()
+    stopTestVnPoll()
   })
 
   ipcMain.on(Channels.captureFrame, (_event, payload: CaptureFramePayload) => {
@@ -210,6 +285,21 @@ app.whenReady().then(async () => {
     Channels.regionsSet,
     async (_event, payload: { windowName: string; region: SharedRegion }): Promise<void> => {
       await setRegion(payload.windowName, payload.region)
+      // If the user just confirmed a region for our Test VN window, switch
+      // capture from the renderer-side getDisplayMedia path to a main-side
+      // webContents.capturePage poll. ScreenCaptureKit on macOS Tahoe stops
+      // delivering fresh frames for windows that aren't being directly
+      // interacted with — even when their content is visibly updating —
+      // which breaks the test rig. capturePage() pulls straight from
+      // Chromium's compositor for windows we own, sidestepping that
+      // throttling. Real (third-party) VNs render continuously via
+      // animations and don't trip the issue.
+      if (testVnWindow && !testVnWindow.isDestroyed()) {
+        const id = testVnWindow.getMediaSourceId()
+        if (id === pendingSourceId()) {
+          startTestVnPoll(payload.region)
+        }
+      }
     }
   )
 
@@ -231,7 +321,7 @@ app.whenReady().then(async () => {
   // VN line, run it straight through the OCR backend, emit the result as a
   // text:line so it flows through tokenize + JMdict + popup UI.
   ipcMain.handle(Channels.devOcrTest, async (_event, png: ArrayBuffer): Promise<string> => {
-    const backend = pickOcrBackend()
+    const backend = getOrCreateOcrBackend()
     if (!backend) throw new Error(`no OCR backend for platform ${process.platform}`)
     const text = await backend.recognize(Buffer.from(png))
     const trimmed = text.trim()
@@ -242,11 +332,9 @@ app.whenReady().then(async () => {
   })
 
   // Dev-only: spawn a regular BrowserWindow showing mock VN dialogue. The
-  // user picks it in the source picker and exercises the real capture →
-  // diff → OCR → emit pipeline without needing a real game. Window title is
-  // "Test VN" so it shows up in the picker (the overlay is excluded via
-  // setContentProtection).
-  let testVnWindow: BrowserWindow | null = null
+  // user picks it in the source picker; capture runs through capturePage
+  // (see startTestVnPoll comment) so we exercise OCR + reader without
+  // depending on ScreenCaptureKit's throttling-when-idle behavior.
   ipcMain.on(Channels.devOpenTestVN, () => {
     if (testVnWindow && !testVnWindow.isDestroyed()) {
       testVnWindow.focus()
@@ -265,6 +353,7 @@ app.whenReady().then(async () => {
     })
     testVnWindow.on('closed', () => {
       testVnWindow = null
+      stopTestVnPoll()
     })
     if (process.env['ELECTRON_RENDERER_URL']) {
       testVnWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '?mode=test-vn')
