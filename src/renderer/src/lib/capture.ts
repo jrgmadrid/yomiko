@@ -12,6 +12,7 @@
 // uncropped ImageBitmap each tick (renders into the region selector preview).
 
 import type { SharedRegion } from '@shared/ipc'
+import { dHashHex } from './dhash'
 
 export interface CaptureHandle {
   stop(): void
@@ -90,12 +91,13 @@ export async function startCapture(): Promise<CaptureHandle> {
             region.w,
             region.h
           )
+          const hash = dHashHex(canvas, region.x, region.y, region.w, region.h)
           const blob = await new Promise<Blob | null>((resolve) =>
             cropCanvas.toBlob((b) => resolve(b), 'image/png')
           )
           if (blob) {
             const buf = await blob.arrayBuffer()
-            window.vnr.captureFrame({ data: buf, region, ts: Date.now() })
+            window.vnr.captureFrame({ data: buf, region, ts: Date.now(), hash })
           }
         }
       }

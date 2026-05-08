@@ -95,4 +95,6 @@ export interface CaptureFramePayload {
   data: ArrayBuffer
   region: SharedRegion
   ts: number
+  /** 64-bit dHash of the cropped frame as a 16-char lowercase hex string. */
+  hash: string
 }
