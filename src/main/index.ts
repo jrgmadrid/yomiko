@@ -1,7 +1,17 @@
 import { app, ipcMain, BrowserWindow, screen } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { createOverlayWindow, createPopupWindow } from './window'
-import { Channels, type PopupShowPayload, type SetIgnorePayload } from '@shared/ipc'
+import {
+  createOverlayWindow,
+  createPopupWindow,
+  getOverlayBarBounds,
+  getOverlayPickerBounds
+} from './window'
+import {
+  Channels,
+  type OverlayMode,
+  type PopupShowPayload,
+  type SetIgnorePayload
+} from '@shared/ipc'
 
 // Defense in depth against Chromium's NativeWindowOcclusionTracker pausing
 // the captured target's compositor. The architectural fix (overlay shrunk
@@ -209,6 +219,12 @@ app.whenReady().then(async () => {
 
   ipcMain.on(Channels.popupHide, () => {
     hidePopup()
+  })
+
+  ipcMain.on(Channels.overlaySetMode, (_event, mode: OverlayMode) => {
+    if (!overlay || overlay.isDestroyed()) return
+    const next = mode === 'picker' ? getOverlayPickerBounds() : getOverlayBarBounds()
+    overlay.setBounds(next)
   })
 
   // Dev-only: bypass capture + stabilizer + dedupe. Take a PNG of a synthetic

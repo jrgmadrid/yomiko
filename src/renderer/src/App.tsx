@@ -91,7 +91,13 @@ function App(): React.JSX.Element {
       captureRef.current = null
     }
     setActiveSource(null)
+    window.vnr.setOverlayMode('picker')
     setPickerOpen(true)
+  }
+
+  const handleClosePicker = (): void => {
+    setPickerOpen(false)
+    window.vnr.setOverlayMode('bar')
   }
 
   const handlePickerConfirmed = (
@@ -102,6 +108,7 @@ function App(): React.JSX.Element {
     captureRef.current = handle
     setActiveSource(source)
     setPickerOpen(false)
+    window.vnr.setOverlayMode('bar')
   }
 
   return (
@@ -142,10 +149,7 @@ function App(): React.JSX.Element {
         </div>
       </div>
       {pickerOpen && (
-        <SourcePicker
-          onClose={() => setPickerOpen(false)}
-          onConfirmed={handlePickerConfirmed}
-        />
+        <SourcePicker onClose={handleClosePicker} onConfirmed={handlePickerConfirmed} />
       )}
     </>
   )

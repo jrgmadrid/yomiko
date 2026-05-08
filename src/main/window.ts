@@ -3,6 +3,9 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 
 const OVERLAY_HEIGHT = 140
+const PICKER_WIDTH = 880
+const PICKER_HEIGHT = 640
+const PICKER_INSET = 32
 
 export interface OverlayBounds {
   x: number
@@ -11,7 +14,7 @@ export interface OverlayBounds {
   height: number
 }
 
-export function getOverlayBounds(): OverlayBounds {
+export function getOverlayBarBounds(): OverlayBounds {
   const display = screen.getPrimaryDisplay()
   const { width: dw, height: dh } = display.workAreaSize
   const { x: dx, y: dy } = display.workArea
@@ -23,6 +26,23 @@ export function getOverlayBounds(): OverlayBounds {
   }
 }
 
+// Picker mode resizes the overlay into a top-left modal-shaped window large
+// enough to host the source picker UI without cramping the drag-rectangle
+// region selector. Top-left positioning leaves the captured target window
+// (typically larger and roughly centered) at least partially visible — so
+// Chromium's occlusion tracker doesn't pause its compositor and the live
+// preview stays fresh.
+export function getOverlayPickerBounds(): OverlayBounds {
+  const display = screen.getPrimaryDisplay()
+  const { x: dx, y: dy } = display.workArea
+  return {
+    x: dx + PICKER_INSET,
+    y: dy + PICKER_INSET,
+    width: PICKER_WIDTH,
+    height: PICKER_HEIGHT
+  }
+}
+
 // The overlay is a thin strip at the bottom of the screen — NOT a full-screen
 // transparent window. The full-screen variant from Ship 1 caused Chromium's
 // NativeWindowOcclusionTracker to mark the captured target window as
@@ -30,7 +50,7 @@ export function getOverlayBounds(): OverlayBounds {
 // the dogfood autopsy). Hover popups now live in their own BrowserWindow
 // (createPopupWindow) which is shown on demand.
 export function createOverlayWindow(): BrowserWindow {
-  const bounds = getOverlayBounds()
+  const bounds = getOverlayBarBounds()
 
   const win = new BrowserWindow({
     ...bounds,

@@ -56,6 +56,7 @@ import {
   type SharedWindowSource,
   type SharedRegion,
   type CaptureFramePayload,
+  type OverlayMode,
   type PopupShowPayload
 } from '@shared/ipc'
 
@@ -108,6 +109,9 @@ const vnr = {
   },
   popupHide: (): void => {
     ipcRenderer.send(Channels.popupHide)
+  },
+  setOverlayMode: (mode: OverlayMode): void => {
+    ipcRenderer.send(Channels.overlaySetMode, mode)
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)

@@ -17,7 +17,8 @@ export const Channels = {
   devOpenTestVN: 'dev:open-test-vn',
   popupShow: 'popup:show',
   popupHide: 'popup:hide',
-  popupData: 'popup:data'
+  popupData: 'popup:data',
+  overlaySetMode: 'overlay:set-mode'
 } as const
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
@@ -103,6 +104,8 @@ export interface CaptureFramePayload {
   /** 64-bit dHash of the cropped frame as a 16-char lowercase hex string. */
   hash: string
 }
+
+export type OverlayMode = 'bar' | 'picker'
 
 export interface PopupShowPayload {
   /** Screen-relative cursor X (px). */

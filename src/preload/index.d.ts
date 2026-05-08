@@ -7,6 +7,7 @@ import {
   SharedWindowSource,
   SharedRegion,
   CaptureFramePayload,
+  OverlayMode,
   PopupShowPayload
 } from '@shared/ipc'
 
@@ -34,6 +35,7 @@ export interface VnrApi {
   openTestVN: () => void
   popupShow: (payload: PopupShowPayload) => void
   popupHide: () => void
+  setOverlayMode: (mode: OverlayMode) => void
   onLine: (cb: (line: string) => void) => () => void
   onStatus: (cb: (s: SourceStatus) => void) => () => void
 }
