@@ -2,10 +2,12 @@ import { app, ipcMain, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createOverlayWindow } from './window'
 import { Channels, type SetIgnorePayload } from '@shared/ipc'
-import { config } from './config'
 import { TextSource } from './sources/types'
 import { ManualPasteSource } from './sources/ManualPasteSource'
-import { TextractorWSSource } from './sources/TextractorWSSource'
+import { OCRSource } from './sources/OCRSource'
+import { AppleVisionBackend } from './ocr/apple-vision'
+import { WindowsMediaBackend } from './ocr/windows-media'
+import type { OcrBackend } from './ocr/types'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
@@ -30,6 +32,27 @@ import type {
 let overlay: BrowserWindow | null = null
 const sources: TextSource[] = []
 let manualSource: ManualPasteSource | null = null
+let ocrSource: OCRSource | null = null
+
+function pickOcrBackend(): OcrBackend | null {
+  if (process.platform === 'darwin') return new AppleVisionBackend()
+  if (process.platform === 'win32') return new WindowsMediaBackend()
+  return null
+}
+
+function getOrCreateOcrSource(): OCRSource | null {
+  if (ocrSource) return ocrSource
+  const backend = pickOcrBackend()
+  if (!backend) {
+    console.warn(`[ocr-source] no backend for platform ${process.platform}`)
+    return null
+  }
+  ocrSource = new OCRSource(backend)
+  bindSource(ocrSource)
+  void ocrSource.start()
+  sources.push(ocrSource)
+  return ocrSource
+}
 
 function bindSource(s: TextSource): void {
   s.on('text', (line) => {
@@ -111,9 +134,9 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.on(Channels.captureFrame, (_event, payload: CaptureFramePayload) => {
-    // S2.1 placeholder — diff/stabilize/OCR pipeline lands in S2.3+.
-    // For now, just confirm frames are arriving from the renderer.
-    void payload
+    const src = getOrCreateOcrSource()
+    if (!src) return
+    void src.ingestFrame(payload)
   })
 
   ipcMain.handle(
@@ -135,10 +158,8 @@ app.whenReady().then(async () => {
   await manualSource.start()
   sources.push(manualSource)
 
-  const wsSource = new TextractorWSSource(config.ws)
-  bindSource(wsSource)
-  await wsSource.start()
-  sources.push(wsSource)
+  // TextractorWSSource is opt-in in Ship 4 (settings toggle for ornamented
+  // titles where OCR fails). Ship 2's default flow is OCR-on-window-capture.
 
   // Warm the kuromoji dict in the background — first line shouldn't pay the
   // ~150ms init cost.
