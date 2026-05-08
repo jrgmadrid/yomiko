@@ -91,48 +91,53 @@ Click-through pattern: `setIgnoreMouseEvents(true, { forward: true })`, toggled 
 
 ## Ship phases
 
-### Ship 1 — MVP "I can read a VN with this" (target: weekend)
+> **Re-ordering note (2026-05-08):** original Ship 2 (settings/polish) and Ship 4 (OCR) swapped. Rationale: a one-click window-capture-plus-OCR flow is the demo-friendly "this works out of the box" experience, and turning Textractor into a power-user toggle behind it is a stronger product cut than shipping more polish on the existing Textractor-first path. Ship 1 already proved the reader works; the next ship should be the thing that lets a stranger use the app without 15 minutes of Wine setup.
 
-Just enough to dogfood.
+### Ship 1 — MVP "I can read a VN with this" — **DONE** ✓ (2026-05-08)
 
-- [ ] electron-vite scaffold, TS strict, React renderer
-- [ ] Overlay window with the config above (Mac panel + Win frameless)
-- [ ] `TextractorWSSource` with exponential backoff reconnect
-- [ ] `ManualPasteSource` for offline testing
-- [ ] `lindera-wasm` integration in main process, IPC tokenize endpoint
-- [ ] `jmdict-simplified` ingest script → SQLite at first run
-- [ ] Yomitan-rules-port deinflector
-- [ ] Hover popup component: term, reading, definitions, deinflection chain
-- [ ] Click-through-except-hit-zones working
-- [ ] Hardcoded font/opacity/position; settings.json file, no UI yet
+Reader pipeline working end-to-end with kuromoji + JMdict popups. Commits `b35efec` … `86f46b7` on `main`.
 
-**Definition of done:** play an actual VN through Whisky, get extracted text in the overlay, hover any word, see a Yomitan-equivalent popup. No crashes.
+**Material pivots from original plan:**
+- Tokenizer: `lindera-wasm` → `kuromoji@0.1.2` + IPADIC. lindera-nodejs ships an empty package on npm (build-from-source only) and lindera-wasm has no Node WASM filesystem access. kuromoji's older dictionary is acceptable for Ship 1; modernization deferred.
+- Deinflector: scope-cut from a full Yomitan rules port to a thin lemma-first lookup pipeline, since kuromoji already produces dictionary forms. Multi-step deinflection chains for the popup land in the renumbered Ship 4.
 
-### Ship 2 — Daily-use polish
+### Ship 2 — One-click OCR + window capture (was Ship 4)
 
-- [ ] Settings window (font family/size, opacity, hotkey, dict toggles, source selection)
+The "demo this in 30 seconds" experience. Removes Textractor as a hard dependency for the default flow.
+
+- [ ] **Window picker** — list running windows (Mac: `SCShareableContent` via ScreenCaptureKit; Win: `Windows.Graphics.Capture` via WinRT bindings). User clicks "select VN window."
+- [ ] **Region selector** — drag a rectangle over the captured frame to mark the textbox. Persist per-window-title so reopening the same VN remembers it.
+- [ ] **Frame diff** — compare crop hash between frames at ~10Hz. Only fire OCR when pixels change beyond threshold.
+- [ ] **OCR backends** behind a `TextSource`-shaped interface so it slots into the existing pipeline:
+  - Mac default: Apple Vision (`VNRecognizeTextRequest` with `recognitionLanguages: ["ja"]`) via a small Swift helper or `node-objc`/native module.
+  - Win default: OneOCR (built into Win 11 since 23H2) via WinRT.
+  - Opt-in heavy mode: manga-ocr ONNX (~400MB) for ornamented/calligraphic VNs (Type-Moon-flavored, KKK-tier) where Vision/OneOCR fail.
+- [ ] **Text-effect handling** — debounce briefly to let typewriter-style rollouts complete before OCR-ing; commit only on stable frames.
+- [ ] **Source toggle in UI** — per-source status pip in the bar (OCR vs Textractor-WS vs Manual). Both can run; OCR is default-on, Textractor stays available behind a setting.
+
+**Definition of done:** install, launch, click "select window," drag textbox, read VN. Zero terminal commands required after install.
+
+### Ship 3 — Sentence mining
+
+(Unchanged — Anki integration always belonged after the source layer is solid.)
+
+- [ ] AnkiConnect v6 client in main process
+- [ ] One-hotkey card creation: current sentence + hovered word + screenshot of the captured window region
+- [ ] Audio capture from VN window (CoreAudio tap on Mac, WASAPI loopback on Win — both painful, may push to Ship 3.5)
+- [ ] Card template config (deck, model, field mapping)
+- [ ] First-run AnkiConnect permission flow
+
+### Ship 4 — Daily-use polish (was Ship 2) + Textractor as power-user mode
+
+- [ ] Settings window (font family/size, opacity, hotkey, source priority, dict toggles)
 - [ ] Line history scrollback (last 200 lines, click to re-show, persisted to SQLite)
 - [ ] Hotkeys: show/hide overlay, force re-render, jump to last line
 - [ ] Tray icon
 - [ ] Pitch accent overlay in popup (using NHK pitch accent dict if user imports)
 - [ ] Frequency dict support (BCCWJ, JPDB)
-- [ ] Better deinflection edge cases (causative-passive, double-て, dialect)
-
-### Ship 3 — Sentence mining
-
-- [ ] AnkiConnect v6 client in main process
-- [ ] One-hotkey card creation: current sentence + hovered word + screenshot
-- [ ] Audio capture from VN window (CoreAudio tap on Mac, WASAPI loopback on Win — both painful, may push to Ship 3.5)
-- [ ] Card template config (deck, model, field mapping)
-- [ ] First-run AnkiConnect permission flow
-
-### Ship 4 — OCR fallback
-
-- [ ] Region selector (drag a box once, persist per-game)
-- [ ] Mac: Apple Vision via Swift native module or `vision-camera-japanese-ocr`-shaped binding
-- [ ] Cross-platform: manga-ocr ONNX runtime
-- [ ] Diff detection on region (only OCR when pixels change)
-- [ ] Same source interface, slots in identically
+- [ ] Yomitan deinflection rules table fully ported, multi-step chains rendered in popup
+- [ ] Modern tokenizer pivot (sudachi-via-subprocess or fully-WASI-bound lindera) to retire the 2007-era IPADIC
+- [ ] Textractor-WS source surfaced in settings as "advanced" toggle for ornamented titles
 
 ### Ship 5 — Distribution
 
@@ -147,15 +152,17 @@ Just enough to dogfood.
 
 - **Audio capture for Ship 3** is genuinely hard cross-platform; may need a separate research spike before Ship 3 starts. Worst case: defer to "user records via OBS, GSM-style file watching" — but that loses the all-in-one promise.
 - **Dictionary distribution**: bundled vs. downloaded on first run. Lean toward downloaded (~12MB gzipped JMdict) so installer stays slim; Ship 5 question.
-- **Multi-game profile support**: per-game settings (region for OCR, dict overrides, mining deck). Ship 2 or Ship 3, not yet decided.
+- **Multi-game profile support**: per-game settings (region for OCR, dict overrides, mining deck). Lands naturally in Ship 2 since region-per-window-title needs persistence anyway.
 - **Color/theme**: not yet designed. Default to dark, glassy, low-contrast against game; expose CSS injection for users who want to restyle.
-- **Whisky's maintenance status** is uncertain in 2026; CrossOver remains the reliable Mac-Wine path. Document both.
+- **OCR text-effect handling**: typewriter rollouts, fade-ins, partial reveals — research how `OwOcr` handles them; may need configurable debounce per game.
+- **manga-ocr packaging**: 400MB ONNX model is too large to bundle in the installer. Download-on-first-use when the user opts into heavy-mode OCR.
 
 ## Known platform limits
 
-- **Windows exclusive fullscreen** breaks the overlay. Most modern engines (KiriKiri, Ren'Py, Unity) use borderless windowed. Document the limit; direct users to switch to windowed mode if needed.
+- **Windows exclusive fullscreen** breaks the overlay AND breaks `Windows.Graphics.Capture` for Ship 2. Most modern engines (KiriKiri, Ren'Py, Unity) use borderless windowed. Document the limit; direct users to switch to windowed mode if needed.
 - **Hardware-accelerated transparency bug #40515** affects some GPU drivers. Expose `disableHardwareAcceleration` toggle in settings.
-- **macOS Tahoe Electron lag reports** (mjtsai 2025-09) — load-test on Tahoe before Ship 1 ships.
+- **macOS Tahoe Electron lag reports** (mjtsai 2025-09) — load-test on Tahoe before Ship 2 ships.
+- **OCR quality cliff** for ornamented/calligraphic VNs (Kajiri Kamui Kagura tier — vertical text, decorative fonts, low-contrast scenes). Apple Vision and OneOCR fail; manga-ocr does meaningfully better but still struggles. These titles will always read better via Textractor hooks; that's why hooks remain available in Ship 4 polish phase.
 
 ## References
 
