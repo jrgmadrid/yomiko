@@ -53,6 +53,9 @@ export function createOverlayWindow(): BrowserWindow {
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    // Detached DevTools — focusable: false panels swallow F12, and DevTools
+    // attached inside the overlay would fight click-through.
+    win.webContents.openDevTools({ mode: 'detach' })
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }

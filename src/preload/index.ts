@@ -40,16 +40,20 @@ const vnr = {
   }
 }
 
-if (process.contextIsolated) {
-  try {
+console.log('[vnr preload] loading; contextIsolated =', process.contextIsolated)
+
+try {
+  if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('vnr', vnr)
-  } catch (error) {
-    console.error(error)
+    console.log('[vnr preload] bridge exposed: electron, vnr')
+  } else {
+    // @ts-ignore — defined in index.d.ts
+    window.electron = electronAPI
+    // @ts-ignore — defined in index.d.ts
+    window.vnr = vnr
+    console.log('[vnr preload] direct-attach: electron, vnr')
   }
-} else {
-  // @ts-ignore — defined in index.d.ts
-  window.electron = electronAPI
-  // @ts-ignore — defined in index.d.ts
-  window.vnr = vnr
+} catch (error) {
+  console.error('[vnr preload] expose failed:', error)
 }
