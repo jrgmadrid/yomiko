@@ -57,6 +57,7 @@ export async function startCapture(): Promise<CaptureHandle> {
   let onFullFrameCb: ((bitmap: ImageBitmap) => void) | null = null
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
+  let frameCount = 0
 
   async function tick(): Promise<void> {
     if (stopped) return
@@ -64,6 +65,14 @@ export async function startCapture(): Promise<CaptureHandle> {
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
       ctx.drawImage(video, 0, 0)
+      frameCount += 1
+      if (frameCount % 25 === 0) {
+        console.log(
+          `[capture] tick ${frameCount}: video.currentTime=${video.currentTime.toFixed(3)} ` +
+            `paused=${video.paused} readyState=${video.readyState} ` +
+            `size=${video.videoWidth}x${video.videoHeight}`
+        )
+      }
 
       if (onFullFrameCb) {
         try {
