@@ -1,6 +1,7 @@
 import { TextSource } from './types'
 import { Stabilizer } from '../ocr/stabilizer'
 import { Deduper } from '../ocr/dedupe'
+import { hammingDistance } from '../ocr/hamming'
 import type { OcrBackend } from '../ocr/types'
 import type { CaptureFramePayload } from '@shared/ipc'
 
@@ -16,6 +17,8 @@ export class OCRSource extends TextSource {
   private active = false
   private hasReceivedFrame = false
   private inFlight = 0
+  private frameCount = 0
+  private prevHash: string | null = null
   private readonly stabilizer = new Stabilizer()
   private readonly deduper = new Deduper()
 
@@ -39,19 +42,31 @@ export class OCRSource extends TextSource {
 
   async ingestFrame(payload: CaptureFramePayload): Promise<void> {
     if (!this.active) return
+    this.frameCount += 1
 
     if (!this.hasReceivedFrame) {
       this.hasReceivedFrame = true
       this.emit('status', 'connected')
-      console.log('[ocr-source] first frame received, hash=', payload.hash.slice(0, 12))
+      console.log('[ocr-source] first frame; hash=', payload.hash)
     }
+
+    // Log every frame whose hash differs from the previous (capture motion).
+    if (this.prevHash !== null && this.prevHash !== payload.hash) {
+      const dist = hammingDistance(payload.hash, this.prevHash)
+      console.log(
+        `[ocr-source] frame ${this.frameCount}: Δ=${dist} bits  hash=${payload.hash.slice(0, 16)}…`
+      )
+    }
+    this.prevHash = payload.hash
 
     const event = this.stabilizer.observe(payload.hash, payload.ts)
     if (event.type !== 'fire') return
 
     if (this.inFlight > 0) return
     this.inFlight += 1
-    console.log('[ocr-source] firing OCR; bytes=', payload.data.byteLength, 'hash=', payload.hash.slice(0, 12))
+    console.log(
+      `[ocr-source] FIRE @frame ${this.frameCount}; bytes=${payload.data.byteLength} hash=${payload.hash}`
+    )
     try {
       const text = await this.backend.recognize(Buffer.from(payload.data))
       const trimmed = text.trim()
