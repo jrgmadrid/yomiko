@@ -1,10 +1,10 @@
 # yomiko — Plan
 
-A native-feeling, Mac-first Japanese visual novel reader. Ingests game text from Textractor (via WebSocket), tokenizes it with a modern morphological analyzer, and shows Yomitan-quality hover dictionary popups in an always-on-top transparent overlay. Sentence mining to Anki on a hotkey. Cross-platform: Mac (primary, runs alongside Whisky/CrossOver/Parallels) and Windows (secondary).
+A native-feeling Japanese visual novel reader. Ingests game text from Textractor (via WebSocket), tokenizes it with a modern morphological analyzer, and shows Yomitan-quality hover dictionary popups in an always-on-top transparent overlay. Sentence mining to Anki on a hotkey. Runs on Mac and Windows.
 
 ## Why this exists
 
-Today's ecosystem partitions cleanly: **Windows users** assemble Textractor + GameSentenceMiner + Yomitan in a browser tab; **Mac users** duct-tape `owocr` → a browser tab running [Renji](https://renji-xd.github.io/texthooker-ui/) or [Kizuna](https://kizuna-texthooker-ui.app/) → Yomitan in that browser. Nothing ships a single, well-designed Mac-first app combining (1) Textractor-WS source, (2) Yomitan-grade popups, (3) Anki sentence mining, (4) polished onboarding. The closest existing thing — `meikipop` — is utility-grade Python with no Anki and no hook source.
+Today's ecosystem leaves users on both platforms duct-taping pieces together: Textractor + GameSentenceMiner + Yomitan-in-browser on Windows; `owocr` → browser tab running [Renji](https://renji-xd.github.io/texthooker-ui/) or [Kizuna](https://kizuna-texthooker-ui.app/) → Yomitan in that browser on Mac. Nothing ships a single, well-designed desktop app combining (1) Textractor-WS source, (2) Yomitan-grade popups, (3) Anki sentence mining, (4) polished onboarding. The closest existing thing — `meikipop` — is utility-grade Python with no Anki and no hook source.
 
 That's the niche.
 
