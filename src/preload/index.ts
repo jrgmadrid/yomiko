@@ -1,10 +1,27 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { Channels } from '../main/ipc/channels'
+import { Channels, type SourceStatus } from '@shared/ipc'
 
 const vnr = {
   setIgnoreMouseEvents: (ignore: boolean): void => {
     ipcRenderer.send(Channels.overlaySetIgnore, { ignore })
+  },
+  devPaste: (line: string): void => {
+    ipcRenderer.send(Channels.devPaste, line)
+  },
+  onLine: (cb: (line: string) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, line: string): void => cb(line)
+    ipcRenderer.on(Channels.textLine, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.textLine, listener)
+    }
+  },
+  onStatus: (cb: (s: SourceStatus) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, s: SourceStatus): void => cb(s)
+    ipcRenderer.on(Channels.textStatus, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.textStatus, listener)
+    }
   }
 }
 
