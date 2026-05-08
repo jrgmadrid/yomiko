@@ -4,7 +4,8 @@ import {
   Channels,
   type SourceStatus,
   type SharedWordGroup,
-  type SharedJmdictEntry
+  type SharedJmdictEntry,
+  type SharedLookupResult
 } from '@shared/ipc'
 
 const vnr = {
@@ -19,6 +20,9 @@ const vnr = {
   },
   lookup: (form: string): Promise<SharedJmdictEntry[]> => {
     return ipcRenderer.invoke(Channels.dictLookup, form)
+  },
+  lookupGroup: (group: SharedWordGroup): Promise<SharedLookupResult> => {
+    return ipcRenderer.invoke(Channels.dictLookupWithDeinflect, group)
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)

@@ -58,3 +58,13 @@ export interface SharedJmdictEntry {
   matchedForm: string
   matchedIsKanji: boolean
 }
+
+export interface SharedDeinflectionStep {
+  description: string
+}
+
+export interface SharedLookupResult {
+  matched: string
+  chain: SharedDeinflectionStep[]
+  entries: SharedJmdictEntry[]
+}

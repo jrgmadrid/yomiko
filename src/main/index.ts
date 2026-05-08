@@ -1,7 +1,7 @@
 import { app, ipcMain, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createOverlayWindow } from './window'
-import { Channels, type SetIgnorePayload, type SharedWordGroup } from '@shared/ipc'
+import { Channels, type SetIgnorePayload } from '@shared/ipc'
 import { config } from './config'
 import { TextSource } from './sources/types'
 import { ManualPasteSource } from './sources/ManualPasteSource'
@@ -9,7 +9,13 @@ import { TextractorWSSource } from './sources/TextractorWSSource'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
-import type { SharedJmdictEntry, SharedJmdictSense } from '@shared/ipc'
+import { lookupGroup } from './dict/deinflect'
+import type {
+  SharedJmdictEntry,
+  SharedJmdictSense,
+  SharedLookupResult,
+  SharedWordGroup
+} from '@shared/ipc'
 
 let overlay: BrowserWindow | null = null
 const sources: TextSource[] = []
@@ -45,26 +51,40 @@ app.whenReady().then(async () => {
     return groupTokens(tokens)
   })
 
+  function toSharedEntry(e: ReturnType<typeof jmdictLookup>[number]): SharedJmdictEntry {
+    return {
+      id: e.id,
+      kanji: e.kanji.map((k) => ({ common: k.common, text: k.text })),
+      kana: e.kana.map((k) => ({ common: k.common, text: k.text })),
+      senses: e.senses.map(
+        (s): SharedJmdictSense => ({
+          partOfSpeech: s.partOfSpeech,
+          field: s.field,
+          misc: s.misc,
+          info: s.info,
+          gloss: s.gloss
+        })
+      ),
+      matchedForm: e.matchedForm,
+      matchedIsKanji: e.matchedIsKanji
+    }
+  }
+
   ipcMain.handle(Channels.dictLookup, (_event, form: string): SharedJmdictEntry[] => {
-    return jmdictLookup(form).map(
-      (e): SharedJmdictEntry => ({
-        id: e.id,
-        kanji: e.kanji.map((k) => ({ common: k.common, text: k.text })),
-        kana: e.kana.map((k) => ({ common: k.common, text: k.text })),
-        senses: e.senses.map(
-          (s): SharedJmdictSense => ({
-            partOfSpeech: s.partOfSpeech,
-            field: s.field,
-            misc: s.misc,
-            info: s.info,
-            gloss: s.gloss
-          })
-        ),
-        matchedForm: e.matchedForm,
-        matchedIsKanji: e.matchedIsKanji
-      })
-    )
+    return jmdictLookup(form).map(toSharedEntry)
   })
+
+  ipcMain.handle(
+    Channels.dictLookupWithDeinflect,
+    (_event, group: SharedWordGroup): SharedLookupResult => {
+      const result = lookupGroup(group)
+      return {
+        matched: result.matched,
+        chain: result.chain.map((s) => ({ description: s.description })),
+        entries: result.entries.map(toSharedEntry)
+      }
+    }
+  )
 
   overlay = createOverlayWindow()
 
