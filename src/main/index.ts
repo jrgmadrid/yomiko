@@ -165,6 +165,40 @@ app.whenReady().then(async () => {
     return trimmed
   })
 
+  // Dev-only: spawn a regular BrowserWindow showing mock VN dialogue. The
+  // user picks it in the source picker and exercises the real capture →
+  // diff → OCR → emit pipeline without needing a real game. Window title is
+  // "Test VN" so it shows up in the picker (the overlay is excluded via
+  // setContentProtection).
+  let testVnWindow: BrowserWindow | null = null
+  ipcMain.on(Channels.devOpenTestVN, () => {
+    if (testVnWindow && !testVnWindow.isDestroyed()) {
+      testVnWindow.focus()
+      return
+    }
+    testVnWindow = new BrowserWindow({
+      width: 900,
+      height: 600,
+      title: 'Test VN',
+      backgroundColor: '#0d111a',
+      webPreferences: {
+        preload: __dirname + '/../preload/index.js',
+        contextIsolation: true,
+        sandbox: false
+      }
+    })
+    testVnWindow.on('closed', () => {
+      testVnWindow = null
+    })
+    if (process.env['ELECTRON_RENDERER_URL']) {
+      testVnWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '?mode=test-vn')
+    } else {
+      testVnWindow.loadFile(__dirname + '/../renderer/index.html', {
+        search: '?mode=test-vn'
+      })
+    }
+  })
+
   overlay = createOverlayWindow()
 
   manualSource = new ManualPasteSource()

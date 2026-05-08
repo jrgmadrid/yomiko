@@ -30,6 +30,7 @@ export interface VnrApi {
   setRegion: (windowName: string, region: SharedRegion) => Promise<void>
   devOcrTest: (png: ArrayBuffer) => Promise<string>
   devRenderAndOcr: (text: string, options?: DevRenderOptions) => Promise<string>
+  openTestVN: () => void
   onLine: (cb: (line: string) => void) => () => void
   onStatus: (cb: (s: SourceStatus) => void) => () => void
 }

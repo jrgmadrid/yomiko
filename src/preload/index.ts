@@ -99,6 +99,9 @@ const vnr = {
     const png = await renderTextToPng(text, options)
     return ipcRenderer.invoke(Channels.devOcrTest, png)
   },
+  openTestVN: (): void => {
+    ipcRenderer.send(Channels.devOpenTestVN)
+  },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)
     ipcRenderer.on(Channels.textLine, listener)

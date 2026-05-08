@@ -13,7 +13,8 @@ export const Channels = {
   captureStatus: 'capture:status',
   regionsGet: 'regions:get',
   regionsSet: 'regions:set',
-  devOcrTest: 'dev:ocr-test'
+  devOcrTest: 'dev:ocr-test',
+  devOpenTestVN: 'dev:open-test-vn'
 } as const
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
