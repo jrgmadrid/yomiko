@@ -16,11 +16,13 @@ import {
   setPendingSource,
   clearPendingSource
 } from './capture/stream'
+import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
   SharedJmdictEntry,
   SharedJmdictSense,
   SharedLookupResult,
+  SharedRegion,
   SharedWindowSource,
   SharedWordGroup
 } from '@shared/ipc'
@@ -113,6 +115,18 @@ app.whenReady().then(async () => {
     // For now, just confirm frames are arriving from the renderer.
     void payload
   })
+
+  ipcMain.handle(
+    Channels.regionsGet,
+    async (_event, windowName: string): Promise<SharedRegion | null> => getRegion(windowName)
+  )
+
+  ipcMain.handle(
+    Channels.regionsSet,
+    async (_event, payload: { windowName: string; region: SharedRegion }): Promise<void> => {
+      await setRegion(payload.windowName, payload.region)
+    }
+  )
 
   overlay = createOverlayWindow()
 

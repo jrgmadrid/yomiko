@@ -5,6 +5,7 @@ import {
   SharedJmdictEntry,
   SharedLookupResult,
   SharedWindowSource,
+  SharedRegion,
   CaptureFramePayload
 } from '@shared/ipc'
 
@@ -18,6 +19,8 @@ export interface VnrApi {
   setSource: (sourceId: string) => void
   stopCapture: () => void
   captureFrame: (payload: CaptureFramePayload) => void
+  getRegion: (windowName: string) => Promise<SharedRegion | null>
+  setRegion: (windowName: string, region: SharedRegion) => Promise<void>
   onLine: (cb: (line: string) => void) => () => void
   onStatus: (cb: (s: SourceStatus) => void) => () => void
 }

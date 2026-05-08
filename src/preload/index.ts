@@ -7,6 +7,7 @@ import {
   type SharedJmdictEntry,
   type SharedLookupResult,
   type SharedWindowSource,
+  type SharedRegion,
   type CaptureFramePayload
 } from '@shared/ipc'
 
@@ -37,6 +38,12 @@ const vnr = {
   },
   captureFrame: (payload: CaptureFramePayload): void => {
     ipcRenderer.send(Channels.captureFrame, payload)
+  },
+  getRegion: (windowName: string): Promise<SharedRegion | null> => {
+    return ipcRenderer.invoke(Channels.regionsGet, windowName)
+  },
+  setRegion: (windowName: string, region: SharedRegion): Promise<void> => {
+    return ipcRenderer.invoke(Channels.regionsSet, { windowName, region })
   },
   onLine: (cb: (line: string) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, line: string): void => cb(line)
