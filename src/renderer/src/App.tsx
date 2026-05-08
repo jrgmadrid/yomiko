@@ -17,7 +17,9 @@ interface RenderedLine {
   groups: SharedWordGroup[]
 }
 
-const HISTORY_LIMIT = 4
+// Just the current line — scrollback is a Ship 4 polish item with its
+// own UI (older lines dimmed, click to re-show, etc.).
+const HISTORY_LIMIT = 1
 let nextLineId = 1
 
 function App(): React.JSX.Element {
@@ -35,14 +37,16 @@ function App(): React.JSX.Element {
   useEffect(
     () =>
       window.vnr.onLine(async (text) => {
+        console.log('[overlay] text:line received:', text)
         try {
           const groups = await window.vnr.tokenize(text)
+          console.log('[overlay] tokenized', groups.length, 'groups')
           setLines((prev) => [
             ...prev.slice(-(HISTORY_LIMIT - 1)),
             { id: nextLineId++, text, groups }
           ])
         } catch (err) {
-          console.error('tokenize failed:', err)
+          console.error('[overlay] tokenize failed:', err)
         }
       }),
     []
