@@ -35,3 +35,26 @@ export interface SharedWordGroup {
   end: number
   tokens: SharedToken[]
 }
+
+export interface SharedJmdictGloss {
+  lang: string
+  text: string
+  type?: string
+}
+
+export interface SharedJmdictSense {
+  partOfSpeech: string[]
+  field: string[]
+  misc: string[]
+  info: string[]
+  gloss: SharedJmdictGloss[]
+}
+
+export interface SharedJmdictEntry {
+  id: number
+  kanji: { common: boolean; text: string }[]
+  kana: { common: boolean; text: string }[]
+  senses: SharedJmdictSense[]
+  matchedForm: string
+  matchedIsKanji: boolean
+}

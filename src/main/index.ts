@@ -8,6 +8,8 @@ import { ManualPasteSource } from './sources/ManualPasteSource'
 import { TextractorWSSource } from './sources/TextractorWSSource'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
+import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
+import type { SharedJmdictEntry, SharedJmdictSense } from '@shared/ipc'
 
 let overlay: BrowserWindow | null = null
 const sources: TextSource[] = []
@@ -43,6 +45,27 @@ app.whenReady().then(async () => {
     return groupTokens(tokens)
   })
 
+  ipcMain.handle(Channels.dictLookup, (_event, form: string): SharedJmdictEntry[] => {
+    return jmdictLookup(form).map(
+      (e): SharedJmdictEntry => ({
+        id: e.id,
+        kanji: e.kanji.map((k) => ({ common: k.common, text: k.text })),
+        kana: e.kana.map((k) => ({ common: k.common, text: k.text })),
+        senses: e.senses.map(
+          (s): SharedJmdictSense => ({
+            partOfSpeech: s.partOfSpeech,
+            field: s.field,
+            misc: s.misc,
+            info: s.info,
+            gloss: s.gloss
+          })
+        ),
+        matchedForm: e.matchedForm,
+        matchedIsKanji: e.matchedIsKanji
+      })
+    )
+  })
+
   overlay = createOverlayWindow()
 
   manualSource = new ManualPasteSource()
@@ -70,6 +93,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', async () => {
   await Promise.all(sources.map((s) => s.stop()))
+  jmdictClose()
 })
 
 app.on('window-all-closed', () => {
