@@ -1,6 +1,6 @@
 # yomiko — Plan
 
-A native-feeling Japanese visual novel reader. Ingests game text from Textractor (via WebSocket), tokenizes it with a modern morphological analyzer, and shows Yomitan-quality hover dictionary popups in an always-on-top transparent overlay. Sentence mining to Anki on a hotkey. Runs on Mac and Windows.
+A native-feeling Japanese visual novel reader. Captures the VN window, OCRs the visible text, and renders Yomitan-quality dictionary popups directly over the game's *own* rendered characters — no parsed-text duplicate, no rectangle-drag onboarding. Sentence mining to Anki on a hotkey. Textractor-WS source remains as a power-user fallback. Runs on Mac (validated) and Windows (parity work outstanding).
 
 ## Why this exists
 
@@ -28,10 +28,10 @@ That's the niche.
 ┌────────────────────────────────────────────────────────────────┐
 │ Renderer (overlay window: transparent, always-on-top, panel)   │
 │                                                                │
-│   ─ Tokenized line display                                     │
-│   ─ Hover popups (Yomitan-style)                               │
+│   ─ Hover zones over captured window (screen-coord hit map)    │
+│   ─ Yomitan-style popups attached to OCR'd tokens              │
 │   ─ Click-through-except-hit-zones                             │
-│   ─ Line history scrollback (Ship 2)                           │
+│   ─ Pill-bar token display (fallback / debug; default hidden)  │
 │   ─ Mining hotkey → IPC → AnkiConnect (Ship 3)                 │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -65,7 +65,7 @@ interface TextSource {
 
 - **`TextractorWSSource`** (Ship 1) — connects to `ws://127.0.0.1:6677` (kuroahna's extension, hardcoded port). Exponential backoff reconnect (server starts lazily after Textractor selects a thread). Plain-text payload — one message = one line.
 - **`ManualPasteSource`** (Ship 1) — paste box for testing without Textractor running. Bonus: useful for static text snippets.
-- **`OCRSource`** (Ship 4) — region select + Apple Vision (Mac) or manga-ocr ONNX (cross-platform fallback). Polls region for changes, OCRs on diff.
+- **`OCRSource`** (Ship 2) — capture entire window, Apple Vision (Mac) or `Windows.Media.Ocr` (Win, deferred). Stabilizer fires on hash change; emits structured `frame-ocr` events with line-level bboxes that the renderer turns into screen-coord hover zones. Heavy-mode manga-ocr ONNX deferred (see Open questions).
 
 ## Overlay window config (key snippet, Mac+Win compatible)
 
@@ -93,6 +93,8 @@ Click-through pattern: `setIgnoreMouseEvents(true, { forward: true })`, toggled 
 
 > **Re-ordering note (2026-05-08):** original Ship 2 (settings/polish) and Ship 4 (OCR) swapped. Rationale: a one-click window-capture-plus-OCR flow is the demo-friendly "this works out of the box" experience, and turning Textractor into a power-user toggle behind it is a stronger product cut than shipping more polish on the existing Textractor-first path. Ship 1 already proved the reader works; the next ship should be the thing that lets a stranger use the app without 15 minutes of Wine setup.
 
+> **Consumer-surface pivot (2026-05-08, late session):** the "render parsed tokens in a translation pill bar" consumer was replaced with a hover-on-VN-text architecture — invisible click-through hit zones in screen coords over the captured window's *own* rendered text. Validated against Test VN + TextEdit; landed as Ship 2.5. The original pill bar still ships as a fallback (toggle Cmd+Shift+H or `?hover=off`) for weird layouts, but it's hidden by default. This eliminated the rectangle-drag onboarding step entirely (the `hasJapanese` filter handles chrome leakage) and removed the duplicate-text awkwardness of two surfaces showing the same line. Open questions about real-VN behavior moved from Ship 2 to Ship 2.5.
+
 ### Ship 1 — MVP "I can read a VN with this" — **DONE** ✓ (2026-05-08)
 
 Reader pipeline working end-to-end with kuromoji + JMdict popups. Commits `b35efec` … `86f46b7` on `main`.
@@ -101,9 +103,9 @@ Reader pipeline working end-to-end with kuromoji + JMdict popups. Commits `b35ef
 - Tokenizer: `lindera-wasm` → `kuromoji@0.1.2` + IPADIC. lindera-nodejs ships an empty package on npm (build-from-source only) and lindera-wasm has no Node WASM filesystem access. kuromoji's older dictionary is acceptable for Ship 1; modernization deferred.
 - Deinflector: scope-cut from a full Yomitan rules port to a thin lemma-first lookup pipeline, since kuromoji already produces dictionary forms. Multi-step deinflection chains for the popup land in the renumbered Ship 4.
 
-### Ship 2 — One-click OCR + window capture (was Ship 4) — **SUBSTANTIALLY DONE** ✓ (2026-05-08)
+### Ship 2 — One-click OCR + window capture (was Ship 4) — **DONE** ✓ (2026-05-08)
 
-Pipeline + UX are built and verified end-to-end on the test rig. **Real-VN verification is the open item** — see "What's left for Ship 2" below.
+OCR pipeline (capture → diff → stabilizer → backend → emit) verified end-to-end. The original "render text into a pill bar" consumer was superseded mid-session by Ship 2.5 (hover-on-VN-text); real-VN dogfood and the Win sidecar parity work moved to Ship 2.5.
 
 **What landed:**
 - [x] **Window picker** — `desktopCapturer.getSources({ types: ['window' ]})` (Mac: routes through ScreenCaptureKit on macOS 14.4+; Win: `Windows.Graphics.Capture`). `setDisplayMediaRequestHandler` with `useSystemPicker: false` so we drive a custom drag-rectangle UX.
@@ -117,12 +119,7 @@ Pipeline + UX are built and verified end-to-end on the test rig. **Real-VN verif
 - [x] **Source picker UX** — multi-step modal (window list → live preview + region selector → confirm). Pip color reflects status. "Select source" / "Change source" CTA in the overlay bar.
 - [x] **Distribution prep** — `electron-builder.yml` `extraResources` for sidecar binaries, postinstall builds the platform-appropriate sidecar.
 
-### What's left for Ship 2
-
-- [ ] **Real-VN dogfood.** Open an actual VN (not the test fixture), point the picker at it, verify the OCR pipeline catches dialogue updates as the VN advances. Real VNs render continuously via animations, so they should not trip the SCK throttling that bites the test fixture (see "Dogfood notes" below). If they do trip it, escalate to a Swift sidecar that calls ScreenCaptureKit directly with explicit `SCStreamConfiguration` settings.
-- [ ] **Compile the Win sidecar** on a Win box (or via `dotnet publish` from Mac after installing .NET 9 SDK). Source is at `vendor/windows-media-ocr/`. Without this, Ship 2 is Mac-only.
-
-**Definition of done:** install, launch, click "select window," drag textbox, read an actual VN. Zero terminal commands required after install. Mac and Win both validated.
+**Definition of done (met):** install → launch → click "select source" → pick a window → live capture starts. Mac validated; Windows parity tracked under Ship 2.5.
 
 ### Dogfood notes (Ship 2)
 
@@ -139,6 +136,38 @@ These are the load-bearing lessons from the 2026-05-08 dogfood session — read 
 **3. Hash sensitivity matters more than expected.** Initial dHash at 64 bits over a 9×8 grid produced Hamming deltas of 2-7 bits between distinct VN lines (background averaged out the text). Bumped to 256 bits (16×16) — still ≤ 7 bits. Switched from dHash (compares adjacent pixels) to aHash (compares each cell to global mean). aHash captures *where* the bright pixels are, which is what changes between VN lines. Distinct lines now produce 30-80 bit deltas. Stabilizer threshold is 20 bits over 256.
 
 **4. Layout caveat.** The overlay bar grows upward as content gets tall (long wrapping dialogue). Without `max-h-[85vh]` + `overflow-y-auto`, the bar's header (status pip + select-source button) slides off the top of the screen. Same pattern in the picker modal. Fixed in `c805713`.
+
+### Ship 2.5 — Hover-on-VN-text consumer — **PROTOTYPED** ✓ (2026-05-08)
+
+Replaces the bottom translation pill with screen-coord hit zones over the captured window's *own* rendered text. The user mouses over the actual game text and gets the popup directly. No duplicate render; no rectangle-drag onboarding; chrome leakage is a feature (menus, scene signage, character name plates all become lookupable, filtered to CJK content via `hasJapanese`).
+
+Validated against Test VN (capturePage path) and TextEdit (real-window path via getDisplayMedia). Commits `e9ef8fb` + `43d83fd` on `main`.
+
+**Architecture additions on top of Ship 2:**
+- `vendor/macos-window-info/` — Swift sidecar wrapping `CGWindowListCopyWindowInfo` for live screen-bounds tracking. Permission-free for `kCGWindowBounds` / `kCGWindowOwnerName` / `kCGWindowNumber`. We deliberately do not request `kCGWindowName` (titles) to avoid the Screen Recording prompt.
+- `desktopCapturer` source IDs are parsed for the CGWindowID (`window:NUMBER:0` on macOS); `activeSourceWindowId` is stashed in main when the picker confirms.
+- `OCRSource` emits a structured `frame-ocr` event (OcrResult + region) on every successful recognize. Main's `bindSource` subscribes and calls `emitRealWindowHoverZones`, which queries the window-info sidecar for live bounds and runs the same coord transform as `emitTestVnHoverZones`.
+- `HoverProtoLayer` in renderer absolute-positions invisible (or debug-bordered) divs at supplied screen-DIP coords. Hover triggers existing `dictLookupWithDeinflect` IPC; popup attaches to the cursor.
+- Hover mode is **default on**. `Cmd+Shift+H` toggles; `Cmd+Shift+D` toggles visible debug rectangles. `?hover=off` disables the default.
+- Source picker auto-confirms a full-frame region as soon as the first bitmap arrives. `RegionSelector.tsx` stays in-file as a future "atypical layouts" escape hatch (`setStep('region')`); not reachable from the current UI.
+
+**Material findings (read before iterating):**
+
+1. **Apple Vision `.fast` is unusable for Japanese.** DTS thread [#131510](https://developer.apple.com/forums/thread/131510) documents that `.fast` returns true per-character bboxes via `boundingBox(for:)`, but in practice it returns *zero observations* on Japanese text. We use `.accurate` and synthesize per-character rects on the Node side by dividing the line bbox horizontally by character count (`synthesizeCharRects` in `src/main/ocr/apple-vision.ts`). CJK fonts are near-monospace so this is tight enough for hover hit zones; narrow chars like 、 ょ get a slightly oversized zone.
+2. **OCRSource fires once for static windows.** The stabilizer needs a >20-bit hash change to fire again; static text (TextEdit, paused VN) gets exactly one `frame-ocr` emit. `HoverZonePayload` therefore lives at App-level state (not inside `HoverProtoLayer`) so it survives hover-mode toggle remounts. Better long-term fix: have the renderer signal "I just toggled on" and have main re-emit the cached payload — see open items.
+3. **Coordinate transform.** Cropped-image-px → full-window-px (+region offset) → window DIPs (÷scaleFactor) → screen DIPs (+capture origin) → overlay-CSS px (−overlay origin). For the Test VN path "capture origin" is `getContentBounds()` (excludes title bar — matches what `webContents.capturePage()` returns); for the real-window path it's the CG window's `kCGWindowBounds` (full window incl. chrome — matches what SCK's `getDisplayMedia` returns).
+4. **Overlay must be `focusable: false`** so it doesn't steal focus from the captured window — but that means renderer-side `keydown` listeners never fire. Hotkeys go through `globalShortcut` in main and forward via IPC.
+
+**What's left for Ship 2.5 → done-done:**
+
+- [ ] **Real-VN dogfood.** Same item from original Ship 2; now means "open a real Mac-native Japanese VN, point the picker at it, verify hover zones track the textbox as lines advance." Narcissu is gone (32-bit, blocked at Catalina). itch.io Ren'Py JP titles are the most accessible path.
+- [ ] **Decouple zone re-emit from OCR fire cadence.** Static-window finding above is mitigated by App-level caching but the proper fix is a renderer→main "send latest" ping on hover-mode-on so we don't depend on stabilizer-fire timing.
+- [ ] **Multi-display / DPI scaling.** Untested across displays with different scale factors. The transform uses `screen.getDisplayMatching(bounds).scaleFactor` per emit, which should handle moves between displays, but unverified.
+- [ ] **Vertical text (tategaki).** Vision needs pre-rotated input; not handled. Many VNs use horizontal but vertical is a real gap.
+- [ ] **Windows parity.** Win sidecar still emits text-only OCR; for hover mode it needs (a) per-line bbox extension (Windows.Media.Ocr's `OcrLine.BoundingRect` is per-pseudo-word and line-grouped) and (b) a window-info equivalent — `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` via koffi, parsing HWND from `window:HWND:0` source IDs. `GetWindowRect` includes invisible DWM resize borders so don't use that.
+- [ ] **Compile the existing Win OCR sidecar.** Source at `vendor/windows-media-ocr/`. Need a Win box or `dotnet publish` from Mac with .NET 9 SDK. Without this, even the text-only Win path is Mac-only.
+
+**Definition of done:** install → launch → click "select source" → pick a real VN window → hover over textbox text → popup. Mac and Win both validated.
 
 ### Ship 3 — Sentence mining
 
@@ -173,13 +202,13 @@ These are the load-bearing lessons from the 2026-05-08 dogfood session — read 
 
 ## Open questions / deferred
 
-- **Real-VN ScreenCaptureKit behavior** (Ship 2 closeout). Need a real VN session to confirm the SCK-throttling-when-idle pathology is test-fixture-specific. If it's not, the next layer is a Swift sidecar talking to `SCStream` directly. See "Dogfood notes" above.
+- **Real-VN ScreenCaptureKit behavior** (Ship 2.5 closeout). Need a real VN session to confirm the SCK-throttling-when-idle pathology doesn't bite real animated VNs. If it does, the next layer is a Swift sidecar talking to `SCStream` directly. See "Dogfood notes" above.
 - **Audio capture for Ship 3** is genuinely hard cross-platform; may need a separate research spike before Ship 3 starts. Worst case: defer to "user records via OBS, GSM-style file watching" — but that loses the all-in-one promise.
 - **Dictionary distribution**: bundled vs. downloaded on first run. Lean toward downloaded (~12MB gzipped JMdict) so installer stays slim; Ship 5 question.
 - **Multi-game profile support**: per-game settings (region for OCR, dict overrides, mining deck). Region persistence is in for Ship 2; the rest waits for Ship 4 settings UI.
 - **Color/theme**: not yet designed. Default to dark, glassy, low-contrast against game; expose CSS injection for users who want to restyle.
 - **OCR text-effect handling**: typewriter rollouts, fade-ins, partial reveals — current 350ms stabilization handles the test fixture. Real VNs may need per-engine debounce tuning.
-- **manga-ocr packaging** (Ship 2.5): 400MB ONNX model is too large to bundle in the installer. Download-on-first-use when the user opts into heavy-mode OCR.
+- **manga-ocr packaging** (deferred past Ship 2.5): 400MB ONNX model is too large to bundle in the installer. Download-on-first-use when the user opts into heavy-mode OCR. Lower priority now that Apple Vision `.accurate` is producing usable results on hover-tested content.
 
 ## Known platform limits
 
@@ -192,12 +221,13 @@ These are the load-bearing lessons from the 2026-05-08 dogfood session — read 
 
 If you're a fresh Claude Code session opening this repo:
 
-1. **Ship 1 + 2 are done as code.** All commits are on `main` at `https://github.com/jrgmadrid/yomiko` (private). Local working dir is clean.
-2. **Run it:** `npm install && npm run build:dict && npm run dev`. The Mac sidecar autobuilds on postinstall (Swift toolchain required). Win sidecar source exists in `vendor/windows-media-ocr/` but is uncompiled — needs `dotnet publish`.
-3. **The test rig:** in DevTools console, `window.vnr.openTestVN()` opens a fake VN with eight Japanese lines you can advance with → / Space. Pick it in the source picker, drag a region over the textbox, advance lines — overlay should update in real time. This works because of the `capturePage` poll path in `src/main/index.ts` (see "Dogfood notes #1").
-4. **The actually-open task:** dogfood Ship 2 against a real VN. If it works, mark Ship 2 done-done and move to Ship 3 (Anki sentence mining). If real-VN frames are stale just like the test fixture was, escalate to a ScreenCaptureKit Swift sidecar.
-5. **Don't touch the architecture.** Specifically don't reintroduce the bottom-bar overlay or the standalone popup BrowserWindow refactor — that's the failed detour from "Dogfood notes #2." The full-screen overlay + inline popup is correct.
-6. **Order of operations going forward:** finish Ship 2 (real-VN check + Win sidecar build) → Ship 2.5 (manga-ocr opt-in) → Ship 3 (Anki) → Ship 4 (settings/polish + Textractor toggle) → Ship 5 (distribution).
+1. **Ships 1, 2, and 2.5 are merged to `main`.** Hover-on-VN-text consumer is the live default. All commits at `https://github.com/jrgmadrid/yomiko` (private). Local working dir clean.
+2. **Run it:** `npm install && npm run build:dict && npm run dev`. The Mac sidecars (Vision OCR + window-info) autobuild on postinstall via `npm run build:sidecar:mac`. Swift toolchain required. Win OCR sidecar source is at `vendor/windows-media-ocr/` but uncompiled.
+3. **The test rig:** in DevTools console of the overlay window, `window.vnr.openTestVN()` opens a fake VN with eight Japanese lines (→ / Space to advance). Pick it in the source picker — picker auto-closes on first frame, no region drag. Hover over textbox text → popup. Cmd+Shift+D shows debug rects. The Test VN path uses `webContents.capturePage()` (see "Dogfood notes #1") because SCK throttles non-interacted owned BrowserWindows.
+4. **For real windows:** pick anything (Safari with JP Wikipedia, Notes.app with JP text, etc.). Frames flow through `getDisplayMedia` → OCRSource → `frame-ocr` → `emitRealWindowHoverZones`. Window position comes from the macos-window-info sidecar (`CGWindowListCopyWindowInfo`).
+5. **The actually-open tasks** (in order): real Mac-native VN dogfood (see "What's left for Ship 2.5"); decouple zone re-emit from stabilizer-fire cadence; vertical text; Windows parity (sidecar bbox extension + `DwmGetWindowAttribute` via koffi).
+6. **Don't touch the architecture.** Specifically: (a) don't reintroduce the bottom-bar overlay or standalone popup BrowserWindow refactor (Dogfood note #2); (b) don't switch the Vision sidecar to `.fast` for per-character bboxes (Ship 2.5 finding #1: zero observations on Japanese); (c) don't move the `onHoverZones` subscription back into `HoverProtoLayer` (Ship 2.5 finding #2: payload must survive hover-mode remounts).
+7. **Order of operations going forward:** finish Ship 2.5 (real-VN dogfood + Windows parity) → Ship 3 (Anki sentence mining) → Ship 4 (settings/polish + Textractor toggle) → Ship 5 (distribution). Manga-ocr stays deferred unless Apple Vision degrades on a real VN.
 
 ## References
 
