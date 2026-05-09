@@ -16,11 +16,12 @@
 //
 // Protocol:
 //   client → sidecar:  "<window-id>\n"
-//   sidecar → client:  {"id":12345,"bounds":[x,y,w,h],"name":"Safari","onScreen":true} \n
-//   sidecar → client:  {"id":12345,"error":"window not found"} \n
+//   sidecar → client:  {"bounds":[x,y,w,h]} \n          (success)
+//   sidecar → client:  {"error":"window not on-screen"} \n   (recoverable)
 //
 // Bounds are in macOS screen coordinates (DIPs / points), top-left origin —
-// same coordinate space as Electron's BrowserWindow.getBounds().
+// same coordinate space as Electron's BrowserWindow.getBounds(). Responses
+// are FIFO-aligned with requests; the client matches them by order.
 
 import Foundation
 import CoreGraphics
@@ -47,23 +48,21 @@ logErr("macos-window-info ready")
 while let raw = readLine() {
     let trimmed = raw.trimmingCharacters(in: .whitespaces)
     guard let id = UInt32(trimmed) else {
-        writeLine(["id": NSNull(), "error": "invalid id: \(trimmed)"])
+        writeLine(["error": "invalid id: \(trimmed)"])
         continue
     }
 
-    // Enumerate all on-screen windows and filter by ID. CGWindowList's
-    // single-window query semantics are fiddly (.optionIncludingWindow
-    // means "above window N including N"); enumerate is simpler and just
-    // as fast.
+    // CGWindowList's single-window query (.optionIncludingWindow means
+    // "above window N including N") is fiddly; enumerate-and-filter is
+    // simpler and microsecond-cheap.
     let opts: CGWindowListOption = [.optionOnScreenOnly]
     guard let infoArr = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else {
-        writeLine(["id": id, "error": "CGWindowListCopyWindowInfo returned nil"])
+        writeLine(["error": "CGWindowListCopyWindowInfo returned nil"])
         continue
     }
 
-    let match = infoArr.first { ($0["kCGWindowNumber"] as? UInt32) == id }
-    guard let dict = match else {
-        writeLine(["id": id, "error": "window not on-screen"])
+    guard let dict = infoArr.first(where: { ($0["kCGWindowNumber"] as? UInt32) == id }) else {
+        writeLine(["error": "window not on-screen"])
         continue
     }
 
@@ -74,13 +73,8 @@ while let raw = readLine() {
         w = bounds["Width"] as? Double ?? 0
         h = bounds["Height"] as? Double ?? 0
     }
-    let name = (dict["kCGWindowOwnerName"] as? String) ?? ""
 
-    writeLine([
-        "id": id,
-        "bounds": [x, y, w, h],
-        "name": name
-    ])
+    writeLine(["bounds": [x, y, w, h]])
 }
 
 logErr("stdin closed; exiting")

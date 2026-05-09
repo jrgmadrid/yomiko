@@ -8,6 +8,7 @@ import { OCRSource } from './sources/OCRSource'
 import { AppleVisionBackend } from './ocr/apple-vision'
 import { WindowsMediaBackend } from './ocr/windows-media'
 import { ocrResultToText, type OcrBackend, type OcrResult } from './ocr/types'
+import { buildHoverZones, hoverPayload } from './ocr/hover-zones'
 import { MacWindowInfo, type WindowBounds } from './window-info/macos'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
@@ -24,14 +25,10 @@ import {
 import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
-  HoverDebugChar,
-  HoverZone,
-  HoverZonePayload,
   SharedJmdictEntry,
   SharedJmdictSense,
   SharedLookupResult,
   SharedRegion,
-  SharedScreenRect,
   SharedWindowSource,
   SharedWordGroup
 } from '@shared/ipc'
@@ -66,8 +63,8 @@ let testVnFrameId = 0
 
 // Real-window (non-Test-VN) hover-zone state. activeSourceWindowId is the
 // CGWindowID parsed from the desktopCapturer source ID when the user picks
-// a window. windowInfo is the persistent Swift sidecar that returns bounds
-// for that window each time we need to map an OCR'd bbox to screen coords.
+// a window. windowInfoBackend is the persistent Swift sidecar that returns
+// bounds for that window each time we map an OCR'd bbox to screen coords.
 let activeSourceWindowId: number | null = null
 let realFrameId = 0
 let windowInfoBackend: MacWindowInfo | null = null
@@ -86,18 +83,17 @@ async function pollTestVnFrame(): Promise<void> {
     const img = await testVnWindow.webContents.capturePage()
     const r = testVnRegion
     if (!r) return
-    const fullSize = img.getSize()
     const cropped = img.crop({ x: r.x, y: r.y, width: r.w, height: r.h })
     if (cropped.isEmpty()) {
+      const full = img.getSize()
       console.log(
-        `[test-vn poll] cropped is empty: full=${fullSize.width}x${fullSize.height}, region=${r.x},${r.y} ${r.w}x${r.h}`
+        `[test-vn poll] cropped is empty: full=${full.width}x${full.height}, region=${r.x},${r.y} ${r.w}x${r.h}`
       )
       return
     }
-    const png = cropped.toPNG()
     const backend = getOrCreateOcrBackend()
     if (!backend) return
-    const result = await backend.recognize(png)
+    const result = await backend.recognize(cropped.toPNG())
     const trimmed = ocrResultToText(result).trim()
     if (!trimmed) return
     if (trimmed !== testVnLastEmit) {
@@ -116,114 +112,48 @@ async function pollTestVnFrame(): Promise<void> {
   }
 }
 
-// Build hover zones for the test VN's owned BrowserWindow path. Coordinate
-// transform: cropped-image px → full-capturePage px (+region offset) →
-// window DIPs (÷scaleFactor) → screen DIPs (+window bounds) → overlay-window
-// CSS px (−overlay bounds). Real (third-party) windows will need a separate
-// path that polls window bounds via CGWindowListCopyWindowInfo / GetWindowRect.
-// Hiragana, katakana, CJK ideographs (incl. extension A and compat).
-// JMdict has no English/Latin/digit entries, so emitting zones for those
-// produces empty popups — skip anything without at least one CJK glyph.
-const CJK_REGEX = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
-function hasJapanese(s: string): boolean {
-  return CJK_REGEX.test(s)
-}
-
-async function emitTestVnHoverZones(result: OcrResult, region: SharedRegion): Promise<void> {
+// Hover-zone emit. The two callers differ only in how they discover the
+// capture origin (where the captured image lives in screen DIPs):
+//   - Test VN: BrowserWindow.getContentBounds() — capturePage returns the
+//     content area, not the framed window, so this matches.
+//   - Real third-party windows: macos-window-info sidecar (kCGWindowBounds).
+//     SCK captures the full framed window and CG bounds match it.
+// Win parity will add a third branch (windows-window-info via DwmGetWindowAttribute).
+async function emitHoverZonesFor(
+  label: 'test-vn' | 'real-window',
+  result: OcrResult,
+  region: SharedRegion,
+  captureOrigin: { x: number; y: number },
+  frameId: number
+): Promise<void> {
   if (!overlay || overlay.isDestroyed()) return
-  if (!testVnWindow || testVnWindow.isDestroyed()) return
-
   const overlayBounds = overlay.getContentBounds()
-  // getContentBounds excludes title-bar / chrome — capturePage returns the
-  // content area, not the framed window, so this matches.
-  const winBounds = testVnWindow.getContentBounds()
-  const display = screen.getDisplayMatching(winBounds)
-  const sf = display.scaleFactor
-
-  function toCss(rect: { x: number; y: number; w: number; h: number }): SharedScreenRect {
-    return {
-      x: (rect.x + region.x) / sf + winBounds.x - overlayBounds.x,
-      y: (rect.y + region.y) / sf + winBounds.y - overlayBounds.y,
-      w: rect.w / sf,
-      h: rect.h / sf
-    }
-  }
-
-  const debugChars: HoverDebugChar[] = []
-  const zones: HoverZone[] = []
-  let zoneId = 0
-
-  for (const line of result.lines) {
-    if (line.chars.length === 0) continue
-    if (!hasJapanese(line.text)) continue
-    const cssRects: SharedScreenRect[] = line.chars.map((c) => toCss(c.rect))
-    for (let i = 0; i < line.chars.length; i++) {
-      const r = cssRects[i]
-      const c = line.chars[i]
-      if (r && c) debugChars.push({ text: c.text, rect: r })
-    }
-
-    let groups: SharedWordGroup[]
-    try {
-      const tokens = await tokenize(line.text)
-      groups = groupTokens(tokens) as unknown as SharedWordGroup[]
-    } catch (err) {
-      console.error('[test-vn] tokenize failed:', (err as Error).message)
-      continue
-    }
-
-    for (const g of groups) {
-      if (g.headPos === '記号' || g.headPos === 'BOS/EOS') continue
-      if (!hasJapanese(g.surface)) continue
-      const start = Math.max(0, g.start)
-      const end = Math.min(line.chars.length, g.end)
-      if (end <= start) continue
-
-      let union: SharedScreenRect | null = null
-      for (let i = start; i < end; i++) {
-        const r2 = cssRects[i]
-        if (!r2 || r2.w <= 0 || r2.h <= 0) continue
-        if (!union) {
-          union = { x: r2.x, y: r2.y, w: r2.w, h: r2.h }
-        } else {
-          const minX = Math.min(union.x, r2.x)
-          const minY = Math.min(union.y, r2.y)
-          const maxX = Math.max(union.x + union.w, r2.x + r2.w)
-          const maxY = Math.max(union.y + union.h, r2.y + r2.h)
-          union = { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
-        }
-      }
-      if (!union) continue
-
-      zones.push({
-        id: zoneId++,
-        surface: g.surface,
-        start: g.start,
-        end: g.end,
-        rect: union,
-        group: g
-      })
-    }
-  }
-
-  const payload: HoverZonePayload = {
-    frameId: ++testVnFrameId,
-    lineText: result.lines.map((l) => l.text).join('\n'),
-    zones,
-    debugChars
-  }
+  const display = screen.getDisplayMatching({
+    x: captureOrigin.x,
+    y: captureOrigin.y,
+    width: region.w,
+    height: region.h
+  })
+  const build = await buildHoverZones(result, {
+    region,
+    captureOrigin,
+    overlayOrigin: { x: overlayBounds.x, y: overlayBounds.y },
+    scaleFactor: display.scaleFactor
+  })
+  const payload = hoverPayload(result, build, frameId)
   console.log(
-    `[test-vn] hover zones: ${zones.length} tokens, ${debugChars.length} chars (frame ${payload.frameId})`
+    `[${label}] hover zones: ${build.zones.length} tokens, ${build.debugChars.length} chars (frame ${payload.frameId})`
   )
   overlay.webContents.send(Channels.hoverZones, payload)
 }
 
-// Real-window path: third-party window via getDisplayMedia. Bounds come from
-// the macos-window-info Swift sidecar (CGWindowListCopyWindowInfo). SCK
-// captures the full window incl. its chrome and CG bounds match — full to
-// full. Mirror of emitTestVnHoverZones; share the body when this stabilizes.
+async function emitTestVnHoverZones(result: OcrResult, region: SharedRegion): Promise<void> {
+  if (!testVnWindow || testVnWindow.isDestroyed()) return
+  const winBounds = testVnWindow.getContentBounds()
+  await emitHoverZonesFor('test-vn', result, region, winBounds, ++testVnFrameId)
+}
+
 async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
-  if (!overlay || overlay.isDestroyed()) return
   if (activeSourceWindowId === null) return
   const wi = getWindowInfo()
   if (!wi) return
@@ -238,94 +168,7 @@ async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
     console.log(`[real-window] window ${activeSourceWindowId} not on-screen`)
     return
   }
-
-  const overlayBounds = overlay.getContentBounds()
-  const display = screen.getDisplayMatching({
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.w,
-    height: bounds.h
-  })
-  const sf = display.scaleFactor
-  const region = data.region
-  const result = data.result
-
-  function toCss(rect: { x: number; y: number; w: number; h: number }): SharedScreenRect {
-    return {
-      x: (rect.x + region.x) / sf + bounds!.x - overlayBounds.x,
-      y: (rect.y + region.y) / sf + bounds!.y - overlayBounds.y,
-      w: rect.w / sf,
-      h: rect.h / sf
-    }
-  }
-
-  const debugChars: HoverDebugChar[] = []
-  const zones: HoverZone[] = []
-  let zoneId = 0
-
-  for (const line of result.lines) {
-    if (line.chars.length === 0) continue
-    if (!hasJapanese(line.text)) continue
-    const cssRects: SharedScreenRect[] = line.chars.map((c) => toCss(c.rect))
-    for (let i = 0; i < line.chars.length; i++) {
-      const r = cssRects[i]
-      const c = line.chars[i]
-      if (r && c) debugChars.push({ text: c.text, rect: r })
-    }
-
-    let groups: SharedWordGroup[]
-    try {
-      const tokens = await tokenize(line.text)
-      groups = groupTokens(tokens) as unknown as SharedWordGroup[]
-    } catch (err) {
-      console.error('[real-window] tokenize failed:', (err as Error).message)
-      continue
-    }
-
-    for (const g of groups) {
-      if (g.headPos === '記号' || g.headPos === 'BOS/EOS') continue
-      if (!hasJapanese(g.surface)) continue
-      const start = Math.max(0, g.start)
-      const end = Math.min(line.chars.length, g.end)
-      if (end <= start) continue
-
-      let union: SharedScreenRect | null = null
-      for (let i = start; i < end; i++) {
-        const r2 = cssRects[i]
-        if (!r2 || r2.w <= 0 || r2.h <= 0) continue
-        if (!union) {
-          union = { x: r2.x, y: r2.y, w: r2.w, h: r2.h }
-        } else {
-          const minX = Math.min(union.x, r2.x)
-          const minY = Math.min(union.y, r2.y)
-          const maxX = Math.max(union.x + union.w, r2.x + r2.w)
-          const maxY = Math.max(union.y + union.h, r2.y + r2.h)
-          union = { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
-        }
-      }
-      if (!union) continue
-
-      zones.push({
-        id: zoneId++,
-        surface: g.surface,
-        start: g.start,
-        end: g.end,
-        rect: union,
-        group: g
-      })
-    }
-  }
-
-  const payload: HoverZonePayload = {
-    frameId: ++realFrameId,
-    lineText: result.lines.map((l) => l.text).join('\n'),
-    zones,
-    debugChars
-  }
-  console.log(
-    `[real-window] hover zones: win=${activeSourceWindowId} ${zones.length} tokens (frame ${payload.frameId})`
-  )
-  overlay.webContents.send(Channels.hoverZones, payload)
+  await emitHoverZonesFor('real-window', data.result, data.region, bounds, ++realFrameId)
 }
 
 function startTestVnPoll(region: SharedRegion): void {
@@ -346,22 +189,17 @@ function stopTestVnPoll(): void {
   testVnLastEmit = ''
 }
 
-let _ocrBackendCache: OcrBackend | null = null
+let ocrBackend: OcrBackend | null = null
 function getOrCreateOcrBackend(): OcrBackend | null {
-  if (_ocrBackendCache) return _ocrBackendCache
-  _ocrBackendCache = pickOcrBackend()
-  return _ocrBackendCache
-}
-
-function pickOcrBackend(): OcrBackend | null {
-  if (process.platform === 'darwin') return new AppleVisionBackend()
-  if (process.platform === 'win32') return new WindowsMediaBackend()
-  return null
+  if (ocrBackend) return ocrBackend
+  if (process.platform === 'darwin') ocrBackend = new AppleVisionBackend()
+  else if (process.platform === 'win32') ocrBackend = new WindowsMediaBackend()
+  return ocrBackend
 }
 
 function getOrCreateOcrSource(): OCRSource | null {
   if (ocrSource) return ocrSource
-  const backend = pickOcrBackend()
+  const backend = getOrCreateOcrBackend()
   if (!backend) {
     console.warn(`[ocr-source] no backend for platform ${process.platform}`)
     return null
@@ -479,12 +317,7 @@ app.whenReady().then(async () => {
       await setRegion(payload.windowName, payload.region)
       // If the user just confirmed a region for our Test VN window, switch
       // capture from the renderer-side getDisplayMedia path to a main-side
-      // webContents.capturePage poll. ScreenCaptureKit on macOS Tahoe stops
-      // delivering fresh frames for windows that aren't being directly
-      // interacted with — even when their content is visibly updating.
-      // capturePage pulls straight from Chromium's compositor for windows we
-      // own. Real (third-party) VNs render continuously via animations and
-      // don't trip the SCK throttling.
+      // webContents.capturePage poll (see the Test VN comment block above).
       if (testVnWindow && !testVnWindow.isDestroyed()) {
         const id = testVnWindow.getMediaSourceId()
         if (id === pendingSourceId()) {
