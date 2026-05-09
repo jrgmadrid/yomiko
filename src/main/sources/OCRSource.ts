@@ -74,6 +74,10 @@ export class OCRSource extends TextSource {
         console.log('[ocr-source] empty OCR result')
         return
       }
+      // Always emit frame-ocr: hover-zone consumers want every OCR result
+      // (the renderer might have toggled into hover mode after the last text
+      // change). Dedupe still gates the textLine emit.
+      this.emit('frame-ocr', { result, region: payload.region })
       if (this.deduper.shouldEmit(trimmed)) {
         console.log('[ocr-source] emit:', trimmed)
         this.emit('text', trimmed)

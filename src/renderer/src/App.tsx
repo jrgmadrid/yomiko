@@ -6,6 +6,7 @@ import { SourcePicker } from './components/SourcePicker'
 import { HoverProtoLayer } from './components/HoverProtoLayer'
 import type { CaptureHandle } from './lib/capture'
 import type {
+  HoverZonePayload,
   SharedLookupResult,
   SharedWindowSource,
   SharedWordGroup,
@@ -31,11 +32,17 @@ function App(): React.JSX.Element {
   const [activeSource, setActiveSource] = useState<SharedWindowSource | null>(null)
   const captureRef = useRef<CaptureHandle | null>(null)
   const [hoverMode, setHoverMode] = useState(
-    () => new URLSearchParams(window.location.search).get('hover') !== null
+    () => new URLSearchParams(window.location.search).get('hover') !== 'off'
   )
   const [hoverDebug, setHoverDebug] = useState(
     () => new URLSearchParams(window.location.search).get('hoverDebug') !== null
   )
+  // Subscribed at App level (not inside HoverProtoLayer) so the payload
+  // survives hover-mode toggles. OCRSource only fires once for static
+  // windows like TextEdit; if HoverProtoLayer mounts after that single
+  // emit, an internal subscription would never see it.
+  const [hoverPayload, setHoverPayload] = useState<HoverZonePayload | null>(null)
+  useEffect(() => window.vnr.onHoverZones(setHoverPayload), [])
 
   useEffect(() => attachClickThrough(), [])
 
@@ -163,7 +170,7 @@ function App(): React.JSX.Element {
         </div>
         {lookup && hoveredAnchor && <Popup data={lookup} anchor={hoveredAnchor} />}
       </div>
-      {hoverMode && <HoverProtoLayer debug={hoverDebug} />}
+      {hoverMode && <HoverProtoLayer debug={hoverDebug} payload={hoverPayload} />}
       {pickerOpen && (
         <SourcePicker
           onClose={() => setPickerOpen(false)}

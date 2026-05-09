@@ -5,6 +5,8 @@ import { Popup } from './Popup'
 interface Props {
   /** Render visible per-character + per-token rectangles for alignment eyeballing. */
   debug?: boolean
+  /** Latest hover-zone payload, owned by App so it survives hover-mode toggles. */
+  payload: HoverZonePayload | null
 }
 
 interface HoveredState {
@@ -12,13 +14,10 @@ interface HoveredState {
   el: HTMLElement
 }
 
-export function HoverProtoLayer({ debug = false }: Props): React.JSX.Element | null {
-  const [payload, setPayload] = useState<HoverZonePayload | null>(null)
+export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.Element | null {
   const [hovered, setHovered] = useState<HoveredState | null>(null)
   const [lookup, setLookup] = useState<SharedLookupResult | null>(null)
   const hoveredIdRef = useRef<number | null>(null)
-
-  useEffect(() => window.vnr.onHoverZones(setPayload), [])
 
   useEffect(() => {
     if (!hovered) return

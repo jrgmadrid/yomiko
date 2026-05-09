@@ -42,7 +42,6 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
 
   const handlePickWindow = async (source: SharedWindowSource): Promise<void> => {
     setSelected(source)
-    setStep('region')
     setError(null)
     try {
       window.vnr.setSource(source.id)
@@ -50,13 +49,22 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
       await new Promise((resolve) => setTimeout(resolve, 50))
       const handle = await startCapture()
       handleRef.current = handle
-      handle.onFullFrame((bitmap) => setFrame(bitmap))
-      // Restore prior region if we have one
-      const prior = await window.vnr.getRegion(source.name)
-      if (prior) {
-        // Don't auto-confirm; show it as initial selection in RegionSelector.
-        // (RegionSelector reads initialRegion prop to highlight on first paint.)
-      }
+
+      // Whole-window capture: wait for the first frame to learn the captured
+      // stream's pixel dimensions, then auto-confirm a full-frame region. The
+      // hover-zone path filters non-Japanese OCR detections (chrome, buttons,
+      // English UI) so margins don't matter the way they did when we were
+      // emitting parsed text into a pill bar. RegionSelector stays in the file
+      // as a future "atypical layouts" escape hatch.
+      handle.onFullFrame(async (bitmap) => {
+        if (releasedRef.current) return
+        handle.onFullFrame(null)
+        const region: SharedRegion = { x: 0, y: 0, w: bitmap.width, h: bitmap.height }
+        handle.setRegion(region)
+        await window.vnr.setRegion(source.name, region)
+        releasedRef.current = true
+        onConfirmed(source, region, handle)
+      })
     } catch (err) {
       setError(`capture failed: ${(err as Error).message}`)
     }

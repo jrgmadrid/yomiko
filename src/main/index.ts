@@ -8,8 +8,10 @@ import { OCRSource } from './sources/OCRSource'
 import { AppleVisionBackend } from './ocr/apple-vision'
 import { WindowsMediaBackend } from './ocr/windows-media'
 import { ocrResultToText, type OcrBackend, type OcrResult } from './ocr/types'
+import { MacWindowInfo, type WindowBounds } from './window-info/macos'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
+import type { FrameOcrData } from './sources/types'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
 import { lookupGroup } from './dict/deinflect'
 import { listWindows } from './capture/picker'
@@ -61,6 +63,20 @@ let testVnRegion: SharedRegion | null = null
 let testVnInFlight = false
 let testVnLastEmit = ''
 let testVnFrameId = 0
+
+// Real-window (non-Test-VN) hover-zone state. activeSourceWindowId is the
+// CGWindowID parsed from the desktopCapturer source ID when the user picks
+// a window. windowInfo is the persistent Swift sidecar that returns bounds
+// for that window each time we need to map an OCR'd bbox to screen coords.
+let activeSourceWindowId: number | null = null
+let realFrameId = 0
+let windowInfoBackend: MacWindowInfo | null = null
+
+function getWindowInfo(): MacWindowInfo | null {
+  if (process.platform !== 'darwin') return null
+  if (!windowInfoBackend) windowInfoBackend = new MacWindowInfo()
+  return windowInfoBackend
+}
 
 async function pollTestVnFrame(): Promise<void> {
   if (testVnInFlight) return
@@ -202,6 +218,116 @@ async function emitTestVnHoverZones(result: OcrResult, region: SharedRegion): Pr
   overlay.webContents.send(Channels.hoverZones, payload)
 }
 
+// Real-window path: third-party window via getDisplayMedia. Bounds come from
+// the macos-window-info Swift sidecar (CGWindowListCopyWindowInfo). SCK
+// captures the full window incl. its chrome and CG bounds match — full to
+// full. Mirror of emitTestVnHoverZones; share the body when this stabilizes.
+async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
+  if (!overlay || overlay.isDestroyed()) return
+  if (activeSourceWindowId === null) return
+  const wi = getWindowInfo()
+  if (!wi) return
+  let bounds: WindowBounds | null
+  try {
+    bounds = await wi.lookup(activeSourceWindowId)
+  } catch (err) {
+    console.error('[real-window] window-info lookup failed:', (err as Error).message)
+    return
+  }
+  if (!bounds) {
+    console.log(`[real-window] window ${activeSourceWindowId} not on-screen`)
+    return
+  }
+
+  const overlayBounds = overlay.getContentBounds()
+  const display = screen.getDisplayMatching({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.w,
+    height: bounds.h
+  })
+  const sf = display.scaleFactor
+  const region = data.region
+  const result = data.result
+
+  function toCss(rect: { x: number; y: number; w: number; h: number }): SharedScreenRect {
+    return {
+      x: (rect.x + region.x) / sf + bounds!.x - overlayBounds.x,
+      y: (rect.y + region.y) / sf + bounds!.y - overlayBounds.y,
+      w: rect.w / sf,
+      h: rect.h / sf
+    }
+  }
+
+  const debugChars: HoverDebugChar[] = []
+  const zones: HoverZone[] = []
+  let zoneId = 0
+
+  for (const line of result.lines) {
+    if (line.chars.length === 0) continue
+    if (!hasJapanese(line.text)) continue
+    const cssRects: SharedScreenRect[] = line.chars.map((c) => toCss(c.rect))
+    for (let i = 0; i < line.chars.length; i++) {
+      const r = cssRects[i]
+      const c = line.chars[i]
+      if (r && c) debugChars.push({ text: c.text, rect: r })
+    }
+
+    let groups: SharedWordGroup[]
+    try {
+      const tokens = await tokenize(line.text)
+      groups = groupTokens(tokens) as unknown as SharedWordGroup[]
+    } catch (err) {
+      console.error('[real-window] tokenize failed:', (err as Error).message)
+      continue
+    }
+
+    for (const g of groups) {
+      if (g.headPos === '記号' || g.headPos === 'BOS/EOS') continue
+      if (!hasJapanese(g.surface)) continue
+      const start = Math.max(0, g.start)
+      const end = Math.min(line.chars.length, g.end)
+      if (end <= start) continue
+
+      let union: SharedScreenRect | null = null
+      for (let i = start; i < end; i++) {
+        const r2 = cssRects[i]
+        if (!r2 || r2.w <= 0 || r2.h <= 0) continue
+        if (!union) {
+          union = { x: r2.x, y: r2.y, w: r2.w, h: r2.h }
+        } else {
+          const minX = Math.min(union.x, r2.x)
+          const minY = Math.min(union.y, r2.y)
+          const maxX = Math.max(union.x + union.w, r2.x + r2.w)
+          const maxY = Math.max(union.y + union.h, r2.y + r2.h)
+          union = { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+        }
+      }
+      if (!union) continue
+
+      zones.push({
+        id: zoneId++,
+        surface: g.surface,
+        start: g.start,
+        end: g.end,
+        rect: union,
+        group: g
+      })
+    }
+  }
+
+  const payload: HoverZonePayload = {
+    frameId: ++realFrameId,
+    lineText: result.lines.map((l) => l.text).join('\n'),
+    zones,
+    debugChars
+  }
+  console.log(
+    `[real-window] hover zones: win=${activeSourceWindowId} ${zones.length} tokens (frame ${payload.frameId})`
+  )
+  overlay.webContents.send(Channels.hoverZones, payload)
+}
+
 function startTestVnPoll(region: SharedRegion): void {
   testVnRegion = region
   testVnLastEmit = ''
@@ -253,6 +379,9 @@ function bindSource(s: TextSource): void {
   })
   s.on('status', (status) => {
     overlay?.webContents.send(Channels.textStatus, status)
+  })
+  s.on('frame-ocr', (data) => {
+    void emitRealWindowHoverZones(data)
   })
 }
 
@@ -320,6 +449,12 @@ app.whenReady().then(async () => {
 
   ipcMain.on(Channels.captureSetSource, (_event, sourceId: string) => {
     setPendingSource(sourceId)
+    // macOS desktopCapturer source IDs encode the CGWindowID as the second
+    // segment: "window:WINDOW_NUMBER:0". Parse it so we can later look up
+    // the live screen position of that window.
+    const m = sourceId.match(/^window:(\d+):/)
+    activeSourceWindowId = m && m[1] ? Number(m[1]) : null
+    console.log(`[capture] active source window id = ${activeSourceWindowId}`)
   })
 
   ipcMain.on(Channels.captureStop, () => {
@@ -448,6 +583,7 @@ app.on('will-quit', () => {
 
 app.on('before-quit', async () => {
   await Promise.all(sources.map((s) => s.stop()))
+  await windowInfoBackend?.close()
   jmdictClose()
 })
 
