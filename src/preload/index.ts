@@ -55,7 +55,9 @@ import {
   type SharedLookupResult,
   type SharedWindowSource,
   type SharedRegion,
-  type CaptureFramePayload
+  type CaptureFramePayload,
+  type HoverHotkey,
+  type HoverZonePayload
 } from '@shared/ipc'
 
 const vnr = {
@@ -114,6 +116,20 @@ const vnr = {
     ipcRenderer.on(Channels.textStatus, listener)
     return () => {
       ipcRenderer.removeListener(Channels.textStatus, listener)
+    }
+  },
+  onHoverZones: (cb: (payload: HoverZonePayload) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, payload: HoverZonePayload): void => cb(payload)
+    ipcRenderer.on(Channels.hoverZones, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.hoverZones, listener)
+    }
+  },
+  onHoverHotkey: (cb: (key: HoverHotkey) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, key: HoverHotkey): void => cb(key)
+    ipcRenderer.on(Channels.hoverHotkey, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.hoverHotkey, listener)
     }
   }
 }

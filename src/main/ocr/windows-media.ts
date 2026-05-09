@@ -2,10 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { resolve } from 'node:path'
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
-import type { OcrBackend } from './types'
+import type { OcrBackend, OcrLine, OcrResult } from './types'
 
 interface PendingRequest {
-  resolve: (text: string) => void
+  resolve: (result: OcrResult) => void
   reject: (err: Error) => void
 }
 
@@ -14,6 +14,8 @@ interface SidecarOutput {
   ts?: number
   error?: string
 }
+
+const ZERO_RECT = { x: 0, y: 0, w: 0, h: 0 }
 
 // Mirrors AppleVisionBackend exactly — same protocol, different binary.
 // Only difference is the JP language pack precondition; on first failure we
@@ -88,7 +90,12 @@ export class WindowsMediaBackend implements OcrBackend {
         if (parsed.error) {
           pending.reject(new Error(parsed.error))
         } else {
-          pending.resolve((parsed.lines ?? []).join('\n'))
+          // Win sidecar pre-bbox extension: emit text-only lines with empty
+          // char arrays. Hover-zone work is Mac-only for the prototype.
+          const lines = (parsed.lines ?? []).map(
+            (text): OcrLine => ({ text, rect: ZERO_RECT, chars: [] })
+          )
+          pending.resolve({ lines })
         }
       } catch (err) {
         pending.reject(new Error(`bad sidecar output: ${line} (${(err as Error).message})`))
@@ -96,7 +103,7 @@ export class WindowsMediaBackend implements OcrBackend {
     }
   }
 
-  async recognize(png: Buffer): Promise<string> {
+  async recognize(png: Buffer): Promise<OcrResult> {
     try {
       await this.start()
     } catch (err) {
@@ -108,7 +115,7 @@ export class WindowsMediaBackend implements OcrBackend {
     }
     if (!this.proc) throw new Error('windows-media sidecar unavailable')
 
-    return new Promise<string>((resolveReq, rejectReq) => {
+    return new Promise<OcrResult>((resolveReq, rejectReq) => {
       this.queue.push({ resolve: resolveReq, reject: rejectReq })
       const lengthPrefix = Buffer.alloc(4)
       lengthPrefix.writeUInt32BE(png.length, 0)

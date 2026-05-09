@@ -14,8 +14,12 @@ export const Channels = {
   regionsGet: 'regions:get',
   regionsSet: 'regions:set',
   devOcrTest: 'dev:ocr-test',
-  devOpenTestVN: 'dev:open-test-vn'
+  devOpenTestVN: 'dev:open-test-vn',
+  hoverZones: 'hover:zones',
+  hoverHotkey: 'hover:hotkey'
 } as const
+
+export type HoverHotkey = 'toggle-mode' | 'toggle-debug'
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
 
@@ -99,4 +103,43 @@ export interface CaptureFramePayload {
   ts: number
   /** 64-bit dHash of the cropped frame as a 16-char lowercase hex string. */
   hash: string
+}
+
+/** A rectangle in overlay-window CSS pixels (top-left origin, post-DPR). */
+export interface SharedScreenRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** A per-token clickable region positioned over the captured window's text. */
+export interface HoverZone {
+  /** Stable id within the frame so React can key and skip rerenders. */
+  id: number
+  /** Token surface (joined kanji/kana). */
+  surface: string
+  /** Char offsets in lineText (inclusive start, exclusive end). */
+  start: number
+  end: number
+  /** Rectangle in overlay-window CSS pixels — drop straight into `style.left/top`. */
+  rect: SharedScreenRect
+  /** Word group for direct lookup via dictLookupWithDeinflect. */
+  group: SharedWordGroup
+}
+
+/** Per-character debug rectangles, drawn when hover-debug mode is on. */
+export interface HoverDebugChar {
+  text: string
+  rect: SharedScreenRect
+}
+
+export interface HoverZonePayload {
+  /** Monotonic frame counter so the renderer can drop stale frames. */
+  frameId: number
+  /** Original line text — useful for sentence-mining downstream. */
+  lineText: string
+  zones: HoverZone[]
+  /** Per-character rects for debug visualization. */
+  debugChars: HoverDebugChar[]
 }

@@ -6,7 +6,9 @@ import {
   SharedLookupResult,
   SharedWindowSource,
   SharedRegion,
-  CaptureFramePayload
+  CaptureFramePayload,
+  HoverHotkey,
+  HoverZonePayload
 } from '@shared/ipc'
 
 export interface DevRenderOptions {
@@ -33,6 +35,8 @@ export interface VnrApi {
   openTestVN: () => void
   onLine: (cb: (line: string) => void) => () => void
   onStatus: (cb: (s: SourceStatus) => void) => () => void
+  onHoverZones: (cb: (payload: HoverZonePayload) => void) => () => void
+  onHoverHotkey: (cb: (key: HoverHotkey) => void) => () => void
 }
 
 declare global {

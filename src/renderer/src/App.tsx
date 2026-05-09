@@ -3,6 +3,7 @@ import { attachClickThrough } from './lib/clickthrough'
 import { TokenLine } from './components/TokenLine'
 import { Popup } from './components/Popup'
 import { SourcePicker } from './components/SourcePicker'
+import { HoverProtoLayer } from './components/HoverProtoLayer'
 import type { CaptureHandle } from './lib/capture'
 import type {
   SharedLookupResult,
@@ -29,8 +30,23 @@ function App(): React.JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeSource, setActiveSource] = useState<SharedWindowSource | null>(null)
   const captureRef = useRef<CaptureHandle | null>(null)
+  const [hoverMode, setHoverMode] = useState(
+    () => new URLSearchParams(window.location.search).get('hover') !== null
+  )
+  const [hoverDebug, setHoverDebug] = useState(
+    () => new URLSearchParams(window.location.search).get('hoverDebug') !== null
+  )
 
   useEffect(() => attachClickThrough(), [])
+
+  useEffect(
+    () =>
+      window.vnr.onHoverHotkey((key) => {
+        if (key === 'toggle-mode') setHoverMode((v) => !v)
+        else if (key === 'toggle-debug') setHoverDebug((v) => !v)
+      }),
+    []
+  )
 
   useEffect(
     () =>
@@ -39,10 +55,9 @@ function App(): React.JSX.Element {
         try {
           const groups = await window.vnr.tokenize(text)
           console.log('[overlay] tokenized', groups.length, 'groups')
-          setLines((prev) => [
-            ...prev.slice(-(HISTORY_LIMIT - 1)),
-            { id: nextLineId++, text, groups }
-          ])
+          setLines((prev) =>
+            [...prev, { id: nextLineId++, text, groups }].slice(-HISTORY_LIMIT)
+          )
         } catch (err) {
           console.error('[overlay] tokenize failed:', err)
         }
@@ -111,6 +126,11 @@ function App(): React.JSX.Element {
                 className={`inline-block h-1.5 w-1.5 rounded-full ${pipColor(status, activeSource)}`}
               />
               <span>{statusLabel(status, activeSource)}</span>
+              {hoverMode && (
+                <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-emerald-300">
+                  hover{hoverDebug ? ' · debug' : ''}
+                </span>
+              )}
             </div>
             <button
               type="button"
@@ -120,27 +140,30 @@ function App(): React.JSX.Element {
               {activeSource ? 'change source' : 'select source'}
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {lines.length === 0 ? (
-              <div className="text-base text-white/50">
-                {activeSource
-                  ? `Watching ${activeSource.name} — waiting for text`
-                  : 'Click "select source" to pick a VN window'}
-              </div>
-            ) : (
-              lines.map((line) => (
-                <TokenLine
-                  key={line.id}
-                  groups={line.groups}
-                  onHover={onHover}
-                  onLeave={onLeave}
-                />
-              ))
-            )}
-          </div>
+          {!hoverMode && (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {lines.length === 0 ? (
+                <div className="text-base text-white/50">
+                  {activeSource
+                    ? `Watching ${activeSource.name} — waiting for text`
+                    : 'Click "select source" to pick a VN window'}
+                </div>
+              ) : (
+                lines.map((line) => (
+                  <TokenLine
+                    key={line.id}
+                    groups={line.groups}
+                    onHover={onHover}
+                    onLeave={onLeave}
+                  />
+                ))
+              )}
+            </div>
+          )}
         </div>
         {lookup && hoveredAnchor && <Popup data={lookup} anchor={hoveredAnchor} />}
       </div>
+      {hoverMode && <HoverProtoLayer debug={hoverDebug} />}
       {pickerOpen && (
         <SourcePicker
           onClose={() => setPickerOpen(false)}

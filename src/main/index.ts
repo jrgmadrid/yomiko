@@ -1,4 +1,4 @@
-import { app, ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow, screen, globalShortcut } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createOverlayWindow } from './window'
 import { Channels, type SetIgnorePayload } from '@shared/ipc'
@@ -7,7 +7,7 @@ import { ManualPasteSource } from './sources/ManualPasteSource'
 import { OCRSource } from './sources/OCRSource'
 import { AppleVisionBackend } from './ocr/apple-vision'
 import { WindowsMediaBackend } from './ocr/windows-media'
-import type { OcrBackend } from './ocr/types'
+import { ocrResultToText, type OcrBackend, type OcrResult } from './ocr/types'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
@@ -22,10 +22,14 @@ import {
 import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
+  HoverDebugChar,
+  HoverZone,
+  HoverZonePayload,
   SharedJmdictEntry,
   SharedJmdictSense,
   SharedLookupResult,
   SharedRegion,
+  SharedScreenRect,
   SharedWindowSource,
   SharedWordGroup
 } from '@shared/ipc'
@@ -56,6 +60,7 @@ let testVnPoll: NodeJS.Timeout | null = null
 let testVnRegion: SharedRegion | null = null
 let testVnInFlight = false
 let testVnLastEmit = ''
+let testVnFrameId = 0
 
 async function pollTestVnFrame(): Promise<void> {
   if (testVnInFlight) return
@@ -65,22 +70,136 @@ async function pollTestVnFrame(): Promise<void> {
     const img = await testVnWindow.webContents.capturePage()
     const r = testVnRegion
     if (!r) return
+    const fullSize = img.getSize()
     const cropped = img.crop({ x: r.x, y: r.y, width: r.w, height: r.h })
-    if (cropped.isEmpty()) return
+    if (cropped.isEmpty()) {
+      console.log(
+        `[test-vn poll] cropped is empty: full=${fullSize.width}x${fullSize.height}, region=${r.x},${r.y} ${r.w}x${r.h}`
+      )
+      return
+    }
     const png = cropped.toPNG()
     const backend = getOrCreateOcrBackend()
     if (!backend) return
-    const text = (await backend.recognize(png)).trim()
-    if (text && text !== testVnLastEmit) {
-      testVnLastEmit = text
-      console.log('[test-vn] emit:', text)
-      overlay?.webContents.send(Channels.textLine, text)
+    const result = await backend.recognize(png)
+    const trimmed = ocrResultToText(result).trim()
+    if (!trimmed) return
+    if (trimmed !== testVnLastEmit) {
+      testVnLastEmit = trimmed
+      console.log('[test-vn] emit:', trimmed)
+      overlay?.webContents.send(Channels.textLine, trimmed)
     }
+    // Always emit hover zones on a successful OCR — the renderer might have
+    // toggled into hover mode after the last text change, in which case it
+    // missed the prior emit. 5fps is fine for a prototype.
+    await emitTestVnHoverZones(result, r)
   } catch (err) {
     console.error('[test-vn poll] failed:', (err as Error).message)
   } finally {
     testVnInFlight = false
   }
+}
+
+// Build hover zones for the test VN's owned BrowserWindow path. Coordinate
+// transform: cropped-image px → full-capturePage px (+region offset) →
+// window DIPs (÷scaleFactor) → screen DIPs (+window bounds) → overlay-window
+// CSS px (−overlay bounds). Real (third-party) windows will need a separate
+// path that polls window bounds via CGWindowListCopyWindowInfo / GetWindowRect.
+// Hiragana, katakana, CJK ideographs (incl. extension A and compat).
+// JMdict has no English/Latin/digit entries, so emitting zones for those
+// produces empty popups — skip anything without at least one CJK glyph.
+const CJK_REGEX = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
+function hasJapanese(s: string): boolean {
+  return CJK_REGEX.test(s)
+}
+
+async function emitTestVnHoverZones(result: OcrResult, region: SharedRegion): Promise<void> {
+  if (!overlay || overlay.isDestroyed()) return
+  if (!testVnWindow || testVnWindow.isDestroyed()) return
+
+  const overlayBounds = overlay.getContentBounds()
+  // getContentBounds excludes title-bar / chrome — capturePage returns the
+  // content area, not the framed window, so this matches.
+  const winBounds = testVnWindow.getContentBounds()
+  const display = screen.getDisplayMatching(winBounds)
+  const sf = display.scaleFactor
+
+  function toCss(rect: { x: number; y: number; w: number; h: number }): SharedScreenRect {
+    return {
+      x: (rect.x + region.x) / sf + winBounds.x - overlayBounds.x,
+      y: (rect.y + region.y) / sf + winBounds.y - overlayBounds.y,
+      w: rect.w / sf,
+      h: rect.h / sf
+    }
+  }
+
+  const debugChars: HoverDebugChar[] = []
+  const zones: HoverZone[] = []
+  let zoneId = 0
+
+  for (const line of result.lines) {
+    if (line.chars.length === 0) continue
+    if (!hasJapanese(line.text)) continue
+    const cssRects: SharedScreenRect[] = line.chars.map((c) => toCss(c.rect))
+    for (let i = 0; i < line.chars.length; i++) {
+      const r = cssRects[i]
+      const c = line.chars[i]
+      if (r && c) debugChars.push({ text: c.text, rect: r })
+    }
+
+    let groups: SharedWordGroup[]
+    try {
+      const tokens = await tokenize(line.text)
+      groups = groupTokens(tokens) as unknown as SharedWordGroup[]
+    } catch (err) {
+      console.error('[test-vn] tokenize failed:', (err as Error).message)
+      continue
+    }
+
+    for (const g of groups) {
+      if (g.headPos === '記号' || g.headPos === 'BOS/EOS') continue
+      if (!hasJapanese(g.surface)) continue
+      const start = Math.max(0, g.start)
+      const end = Math.min(line.chars.length, g.end)
+      if (end <= start) continue
+
+      let union: SharedScreenRect | null = null
+      for (let i = start; i < end; i++) {
+        const r2 = cssRects[i]
+        if (!r2 || r2.w <= 0 || r2.h <= 0) continue
+        if (!union) {
+          union = { x: r2.x, y: r2.y, w: r2.w, h: r2.h }
+        } else {
+          const minX = Math.min(union.x, r2.x)
+          const minY = Math.min(union.y, r2.y)
+          const maxX = Math.max(union.x + union.w, r2.x + r2.w)
+          const maxY = Math.max(union.y + union.h, r2.y + r2.h)
+          union = { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+        }
+      }
+      if (!union) continue
+
+      zones.push({
+        id: zoneId++,
+        surface: g.surface,
+        start: g.start,
+        end: g.end,
+        rect: union,
+        group: g
+      })
+    }
+  }
+
+  const payload: HoverZonePayload = {
+    frameId: ++testVnFrameId,
+    lineText: result.lines.map((l) => l.text).join('\n'),
+    zones,
+    debugChars
+  }
+  console.log(
+    `[test-vn] hover zones: ${zones.length} tokens, ${debugChars.length} chars (frame ${payload.frameId})`
+  )
+  overlay.webContents.send(Channels.hoverZones, payload)
 }
 
 function startTestVnPoll(region: SharedRegion): void {
@@ -246,8 +365,8 @@ app.whenReady().then(async () => {
   ipcMain.handle(Channels.devOcrTest, async (_event, png: ArrayBuffer): Promise<string> => {
     const backend = getOrCreateOcrBackend()
     if (!backend) throw new Error(`no OCR backend for platform ${process.platform}`)
-    const text = await backend.recognize(Buffer.from(png))
-    const trimmed = text.trim()
+    const result = await backend.recognize(Buffer.from(png))
+    const trimmed = ocrResultToText(result).trim()
     if (trimmed && overlay && !overlay.isDestroyed()) {
       overlay.webContents.send(Channels.textLine, trimmed)
     }
@@ -289,6 +408,19 @@ app.whenReady().then(async () => {
 
   overlay = createOverlayWindow()
 
+  // Hover-prototype hotkeys. The overlay window is focusable: false, so
+  // renderer-side keydown listeners never fire — register globally and
+  // forward via IPC.
+  const okMode = globalShortcut.register('CommandOrControl+Shift+H', () => {
+    overlay?.webContents.send(Channels.hoverHotkey, 'toggle-mode')
+  })
+  const okDebug = globalShortcut.register('CommandOrControl+Shift+D', () => {
+    overlay?.webContents.send(Channels.hoverHotkey, 'toggle-debug')
+  })
+  if (!okMode || !okDebug) {
+    console.warn(`[hotkeys] register failed: mode=${okMode}, debug=${okDebug}`)
+  }
+
   manualSource = new ManualPasteSource()
   bindSource(manualSource)
   await manualSource.start()
@@ -308,6 +440,10 @@ app.whenReady().then(async () => {
       overlay = createOverlayWindow()
     }
   })
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 app.on('before-quit', async () => {
