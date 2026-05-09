@@ -169,6 +169,20 @@ Validated against Test VN (capturePage path) and TextEdit (real-window path via 
 
 **Definition of done:** install → launch → click "select source" → pick a real VN window → hover over textbox text → popup. Mac and Win both validated.
 
+### Ship 2.6 — Cross-platform manga-OCR via ONNX — **PLANNED** (2026-05-09)
+
+Empirical follow-up to Ship 2.5 dogfood: Apple Vision `.accurate` reliably substitutes rare kanji with similar-looking common ones because of language-model frequency bias. Confirmed against 「唵・摩利支曳婆婆訶」 from a Kajiri Kamui Kagura screenshot — Vision returns 俺 ("I/me", common) in place of 唵 ("om", rare); they share the right component (奄), differ only in the left radical (亻 vs 口), and 俺 outweighs 唵 in any training corpus by ~5 orders of magnitude. Pre-OCR scaling (tested 0.7×, 1×, 2×) and pre-rotation (vertical mode) don't change the substitution rate; they're diagnostics, not fixes. Manga-OCR is the documented fix — TrOCR-class model fine-tuned on Japanese fictional content, exactly the corpus where rare kanji appear.
+
+**Decision: ONNX-in-Node, not Python sidecar.** Python on Windows is hostile (no system Python; PyInstaller bundle adds ~100MB plus signing pain). `onnxruntime-node` ships prebuilt native binaries for Mac arm64+x64 and Win x64 uniformly; no Python in the install.
+
+**Architecture: hybrid Vision-detect + manga-OCR-recognize.** Manga-OCR is recognition-only — given a cropped line image, returns the text; doesn't produce bboxes, doesn't detect arbitrary scenes. Vision is good at *detection* (finding line bboxes), bad at *recognition* of rare kanji. Manga-OCR is the reverse. Pipeline: Vision finds bboxes → for each line, crop the captured PNG → send to manga-OCR → splice the better text back into the OcrResult before tokenize/zone-build.
+
+**Plan + handoff details:** see `~/.claude/plans/manga-ocr-onnx.md`. Includes the validation gate (a standalone test that confirms manga-OCR actually fixes 唵→俺 before any architectural integration), stack picks (`@huggingface/transformers` over raw `onnxruntime-node` to avoid hand-rolling the ViT preprocessing/tokenizer), and interaction notes for the `experiment/vertical-and-upscale` branch.
+
+**Branch state at plan-write time (2026-05-09):**
+- `main` is at `07c3065` (Ship 2.5 done; clean working tree).
+- `experiment/vertical-and-upscale` (`69e8c24`) holds Cmd+Shift+J vertical pre-rotation and Cmd+Shift+U scale-to-1800px-target plus a couple of bug fixes (hash-on-output-canvas, initial-state propagation, OcrResult dims). Both toggles confirmed-not-fixing the substitution problem; the bug fixes are independently good and worth cherry-picking.
+
 ### Ship 3 — Sentence mining
 
 (Unchanged — Anki integration always belonged after the source layer is solid.)
