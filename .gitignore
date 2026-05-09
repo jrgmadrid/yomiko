@@ -8,3 +8,4 @@ resources/dict/*.db
 resources/dict/*.db-*
 resources/lindera/
 resources/bin/
+.cache/

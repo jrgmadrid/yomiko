@@ -169,19 +169,32 @@ Validated against Test VN (capturePage path) and TextEdit (real-window path via 
 
 **Definition of done:** install → launch → click "select source" → pick a real VN window → hover over textbox text → popup. Mac and Win both validated.
 
-### Ship 2.6 — Cross-platform manga-OCR via ONNX — **PLANNED** (2026-05-09)
+### Ship 2.6 — Cross-platform manga-OCR via ONNX — **INVESTIGATED, NOT VIABLE AS SCOPED** (2026-05-09)
 
-Empirical follow-up to Ship 2.5 dogfood: Apple Vision `.accurate` reliably substitutes rare kanji with similar-looking common ones because of language-model frequency bias. Confirmed against 「唵・摩利支曳婆婆訶」 from a Kajiri Kamui Kagura screenshot — Vision returns 俺 ("I/me", common) in place of 唵 ("om", rare); they share the right component (奄), differ only in the left radical (亻 vs 口), and 俺 outweighs 唵 in any training corpus by ~5 orders of magnitude. Pre-OCR scaling (tested 0.7×, 1×, 2×) and pre-rotation (vertical mode) don't change the substitution rate; they're diagnostics, not fixes. Manga-OCR is the documented fix — TrOCR-class model fine-tuned on Japanese fictional content, exactly the corpus where rare kanji appear.
+The plan was: hybrid Vision-detect + manga-OCR-recognize, ONNX-in-Node via `@huggingface/transformers`, fixing the 唵→俺 substitution Vision shows on Kajiri Kamui Kagura. Validation gate per the plan (`~/.claude/plans/manga-ocr-onnx.md` §44-55) ran first and **failed**. Plan premise was wrong.
 
-**Decision: ONNX-in-Node, not Python sidecar.** Python on Windows is hostile (no system Python; PyInstaller bundle adds ~100MB plus signing pain). `onnxruntime-node` ships prebuilt native binaries for Mac arm64+x64 and Win x64 uniformly; no Python in the install.
+**What we found.** The 唵→俺 problem isn't Apple Vision's frequency bias — it's a **vocabulary gap shared by every off-the-shelf Japanese OCR model**. Manga-OCR uses cl-tohoku BERT-japanese tokenizer with 6144 chars; 唵 is not in the vocab. EasyOCR's Japanese model: 2214 chars, no 唵 (also no 俺). PaddleOCR's Japanese model: 4399 chars, no 唵. The model literally cannot output a token it doesn't have, regardless of input quality.
 
-**Architecture: hybrid Vision-detect + manga-OCR-recognize.** Manga-OCR is recognition-only — given a cropped line image, returns the text; doesn't produce bboxes, doesn't detect arbitrary scenes. Vision is good at *detection* (finding line bboxes), bad at *recognition* of rare kanji. Manga-OCR is the reverse. Pipeline: Vision finds bboxes → for each line, crop the captured PNG → send to manga-OCR → splice the better text back into the OcrResult before tokenize/zone-build.
+Validation evidence (run on 2026-05-09):
+- Canonical Python `manga-ocr` (kha-white) on the Kajiri text-panel crop: `「俺・摩利支恵娑婆訶一」」` — same 俺 substitution as Vision, plus 曳→恵.
+- Same on a clean, isolated 160px synthetic 唵 in two fonts (Songti, Hiragino Sans GB): `昨俺` — model hallucinates two characters from one perfect glyph; both wrong.
+- `vocab.txt` check: every other char in the mantra (摩利支曳婆訶) is in vocab; 唵 is the only miss.
 
-**Plan + handoff details:** see `~/.claude/plans/manga-ocr-onnx.md`. Includes the validation gate (a standalone test that confirms manga-OCR actually fixes 唵→俺 before any architectural integration), stack picks (`@huggingface/transformers` over raw `onnxruntime-node` to avoid hand-rolling the ViT preprocessing/tokenizer), and interaction notes for the `experiment/vertical-and-upscale` branch.
+**The frequency-bias problem (曳→恵) is also broader than expected.** Manga-OCR was supposed to fix this class because both characters are in vocab. It didn't — got the same 曳→恵 wrong as Vision on this image. So manga-OCR doesn't reliably outperform Vision on in-vocab substitutions either.
 
-**Branch state at plan-write time (2026-05-09):**
-- `main` is at `07c3065` (Ship 2.5 done; clean working tree).
-- `experiment/vertical-and-upscale` (`69e8c24`) holds Cmd+Shift+J vertical pre-rotation and Cmd+Shift+U scale-to-1800px-target plus a couple of bug fixes (hash-on-output-canvas, initial-state propagation, OcrResult dims). Both toggles confirmed-not-fixing the substitution problem; the bug fixes are independently good and worth cherry-picking.
+**What would actually fix it:** vision-language models with byte-level/BPE tokenizers (Qwen2.5-VL, GPT-4o-vision, Claude). They have full Unicode and can produce 唵. But that's either cloud (API key + per-line cost) or heavy self-host (Qwen2.5-VL-3B is ~6GB). Not in scope for v1.
+
+**Verified non-fixes:**
+- Apple Vision's `usesLanguageCorrection` is already `false` (`vendor/macos-vision-ocr/main.swift:99`) — substitution is in the visual recognition step, not language post-processing.
+- Source-image upscaling (2×/4×/6×) — manga-OCR's ViT preprocessor downscales to 224×224 internally, so source scale is a no-op for it. Same finding for Vision in earlier dogfood.
+
+**Conclusion.** Ship 2.6 as scoped is dead. The Kajiri-tier ornamented/mantra case moves to Known Platform Limits below — point users at Textractor for these titles (the existing escape hatch). The validation effort is preserved here and in `project_vision_substitution.md` so we don't re-investigate.
+
+**If revisited later:** the path is a cloud-VLM fallback for the long tail (line crop → Claude/GPT-4o vision when text fails dictionary lookup or hits a substitution-prone pattern). Or wait for a self-hostable VLM that's fast enough for live capture. Don't go back to constrained-vocab JP OCR models.
+
+**Branch state:**
+- `main` is at `07c3065` (Ship 2.5 done; clean working tree before this update).
+- `experiment/vertical-and-upscale` (`69e8c24`) is now **detritus** w.r.t. Ship 2.6 — the diagnostic toggles (vertical pre-rotation, source upscaling) were validating a hypothesis we now know is the wrong layer. The three bug fixes on that branch (hash-on-output-canvas, initial-state propagation in `handlePickerConfirmed`, `OcrResult` carrying imageWidth/imageHeight) are still independently good and worth cherry-picking when we touch the OCR pipeline next.
 
 ### Ship 3 — Sentence mining
 
@@ -222,14 +235,14 @@ Empirical follow-up to Ship 2.5 dogfood: Apple Vision `.accurate` reliably subst
 - **Multi-game profile support**: per-game settings (region for OCR, dict overrides, mining deck). Region persistence is in for Ship 2; the rest waits for Ship 4 settings UI.
 - **Color/theme**: not yet designed. Default to dark, glassy, low-contrast against game; expose CSS injection for users who want to restyle.
 - **OCR text-effect handling**: typewriter rollouts, fade-ins, partial reveals — current 350ms stabilization handles the test fixture. Real VNs may need per-engine debounce tuning.
-- **manga-ocr packaging** (deferred past Ship 2.5): 400MB ONNX model is too large to bundle in the installer. Download-on-first-use when the user opts into heavy-mode OCR. Lower priority now that Apple Vision `.accurate` is producing usable results on hover-tested content.
+- **Cloud-VLM fallback for rare-kanji long tail** (post-Ship-2.6 investigation): when Vision OCR'd text fails dictionary lookup or matches known substitution patterns, send the line crop to a vision-language model (Claude/GPT-4o vision API). Closes the vocab-gap class that no constrained-vocab JP OCR can solve. Requires user-supplied API key + per-line cost; opt-in. Not scheduled.
 
 ## Known platform limits
 
 - **Windows exclusive fullscreen** breaks the overlay AND breaks `Windows.Graphics.Capture` for Ship 2. Most modern engines (KiriKiri, Ren'Py, Unity) use borderless windowed. Document the limit; direct users to switch to windowed mode if needed.
 - **Hardware-accelerated transparency bug #40515** affects some GPU drivers. Expose `disableHardwareAcceleration` toggle in settings.
 - **macOS Tahoe Electron lag reports** (mjtsai 2025-09) — load-test on Tahoe before Ship 2 ships.
-- **OCR quality cliff** for ornamented/calligraphic VNs (Kajiri Kamui Kagura tier — vertical text, decorative fonts, low-contrast scenes). Apple Vision and OneOCR fail; manga-ocr does meaningfully better but still struggles. These titles will always read better via Textractor hooks; that's why hooks remain available in Ship 4 polish phase.
+- **OCR vocabulary gap on rare/Buddhist/historical kanji** (Kajiri Kamui Kagura tier). Validated 2026-05-09: Apple Vision, manga-OCR, EasyOCR, and PaddleOCR Japanese models all lack 唵 (and similar JIS X 0208 Level 2 / Buddhist mantra characters) in their training vocabularies. The 6144-char cl-tohoku BERT vocab manga-OCR uses is representative of the ceiling for off-the-shelf JP OCR. Only vision-language models with byte-level tokenizers (Qwen2.5-VL, GPT-4o, Claude) can produce these chars. Document the limit; point affected users at Textractor hooks (which read the source script directly and bypass OCR entirely). See Ship 2.6 closeout for the validation evidence.
 
 ## Picking up where we left off (handoff for the next session)
 
@@ -240,8 +253,8 @@ If you're a fresh Claude Code session opening this repo:
 3. **The test rig:** in DevTools console of the overlay window, `window.vnr.openTestVN()` opens a fake VN with eight Japanese lines (→ / Space to advance). Pick it in the source picker — picker auto-closes on first frame, no region drag. Hover over textbox text → popup. Cmd+Shift+D shows debug rects. The Test VN path uses `webContents.capturePage()` (see "Dogfood notes #1") because SCK throttles non-interacted owned BrowserWindows.
 4. **For real windows:** pick anything (Safari with JP Wikipedia, Notes.app with JP text, etc.). Frames flow through `getDisplayMedia` → OCRSource → `frame-ocr` → `emitRealWindowHoverZones`. Window position comes from the macos-window-info sidecar (`CGWindowListCopyWindowInfo`).
 5. **The actually-open tasks** (in order): real Mac-native VN dogfood (see "What's left for Ship 2.5"); decouple zone re-emit from stabilizer-fire cadence; vertical text; Windows parity (sidecar bbox extension + `DwmGetWindowAttribute` via koffi).
-6. **Don't touch the architecture.** Specifically: (a) don't reintroduce the bottom-bar overlay or standalone popup BrowserWindow refactor (Dogfood note #2); (b) don't switch the Vision sidecar to `.fast` for per-character bboxes (Ship 2.5 finding #1: zero observations on Japanese); (c) don't move the `onHoverZones` subscription back into `HoverProtoLayer` (Ship 2.5 finding #2: payload must survive hover-mode remounts).
-7. **Order of operations going forward:** finish Ship 2.5 (real-VN dogfood + Windows parity) → Ship 3 (Anki sentence mining) → Ship 4 (settings/polish + Textractor toggle) → Ship 5 (distribution). Manga-ocr stays deferred unless Apple Vision degrades on a real VN.
+6. **Don't touch the architecture.** Specifically: (a) don't reintroduce the bottom-bar overlay or standalone popup BrowserWindow refactor (Dogfood note #2); (b) don't switch the Vision sidecar to `.fast` for per-character bboxes (Ship 2.5 finding #1: zero observations on Japanese); (c) don't move the `onHoverZones` subscription back into `HoverProtoLayer` (Ship 2.5 finding #2: payload must survive hover-mode remounts); (d) don't restart the manga-OCR investigation without reading the Ship 2.6 closeout above first — the vocab-gap finding kills any constrained-vocab JP OCR (manga-OCR, EasyOCR, PaddleOCR all confirmed missing 唵).
+7. **Order of operations going forward:** finish Ship 2.5 (real-VN dogfood + Windows parity + cherry-pick the three bug fixes from `experiment/vertical-and-upscale`) → Ship 3 (Anki sentence mining) → Ship 4 (settings/polish + Textractor toggle) → Ship 5 (distribution). Rare-kanji substitution stays a documented limit; revisit only as a cloud-VLM fallback (see Open questions).
 
 ## References
 
