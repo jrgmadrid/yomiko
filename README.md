@@ -16,7 +16,7 @@ Yomiko packages the same workflow into one app:
 
 - **Capture any window** with one click from a picker.
 - **Hover popups attach to the VN's own rendered text** via screen-coord hit zones. No parsed-text duplicate bar.
-- **DeepL translation** for the whole line, shown beneath the source. Coexists with the popups.
+- **Whole-line machine translation** shown beneath the source. Coexists with the popups.
 - **Sentence mining to Anki** on a hotkey *(planned)*.
 - **Textractor WebSocket source** as a fallback for ornamented titles where OCR struggles.
 
@@ -31,9 +31,9 @@ Yomiko packages the same workflow into one app:
 ## Quick start
 
 ```bash
-npm install                # also builds Mac sidecars via postinstall
-npm run build:dict         # one-time: builds the JMdict SQLite
-export DEEPL_API_KEY=...   # optional; popups work without it
+npm install                       # also builds Mac sidecars via postinstall
+npm run build:dict                # one-time: builds the JMdict SQLite
+export DEEPSEEK_API_KEY=...       # or DEEPL_API_KEY=...; either enables translation
 npm run dev
 ```
 
@@ -53,7 +53,7 @@ For development without a real VN: `window.vnr.openTestVN()` in DevTools opens a
 | Mac OCR | Apple Vision via Swift sidecar |
 | Mac window tracking | CGWindowListCopyWindowInfo via Swift sidecar |
 | Win OCR (in progress) | Windows.Media.Ocr via C# sidecar |
-| Translation | DeepL Free/Pro via REST. Pluggable `Translator` interface; DeepSeek and OpenAI-compatible LLM backends queued. |
+| Translation | DeepSeek (default) or DeepL (BYOK) via the pluggable `Translator` interface. OpenAI-compatible LLMs and a hosted proxy planned. |
 
 ## License
 
