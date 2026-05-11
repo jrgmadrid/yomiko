@@ -186,12 +186,19 @@ function App(): React.JSX.Element {
             if (!currentLine || !JAPANESE_REGEX.test(currentLine.text)) return null
             const matched =
               translation && translation.source === currentLine.text ? translation : null
+            // JP→EN char ratio averages ~1.5–2x; bar width approximates the
+            // expected English render length so the placeholder doesn't feel
+            // disproportionate to short or long sources. Clamped at both ends.
+            const skeletonPx = Math.min(560, Math.max(96, currentLine.text.length * 14))
             return (
               <div className="shrink-0 border-t border-white/10 pt-2 text-sm leading-relaxed">
                 {matched ? (
                   <span className="text-white/60">{matched.text}</span>
                 ) : (
-                  <span className="italic text-white/30">translating…</span>
+                  <div
+                    className="vnr-shimmer h-[1.1em] rounded-md"
+                    style={{ width: `${skeletonPx}px` }}
+                  />
                 )}
               </div>
             )

@@ -15,3 +15,25 @@ body,
     sans-serif;
   color: rgba(255, 255, 255, 0.92);
 }
+
+/* Translation-strip skeleton: shimmer gradient sliding across a dim bar
+   while DeepSeek round-trips. Width set inline per source-line length. */
+@keyframes vnr-shimmer {
+  0% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: 150% 0;
+  }
+}
+
+.vnr-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: vnr-shimmer 1.4s ease-in-out infinite;
+}
