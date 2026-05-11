@@ -3,45 +3,43 @@
 
   # yomiko
 
-  *A native Japanese visual novel reader. Capture the window, OCR the text, hover for dictionary, machine-translate the line.*
+  *A Japanese visual novel reader. Capture the window, OCR the text, hover for dictionary, translate per line.*
 </div>
 
 ---
 
 ## What this is
 
-Most of the Japanese-VN learning ecosystem on macOS is duct tape: `owocr` piping text into a browser tab running [Renji](https://renji-xd.github.io/texthooker-ui/) or [Kizuna](https://kizuna-texthooker-ui.app/), Yomitan in that browser for popups, copy-paste into DeepL in another tab for whole-line translation. On Windows the equivalent is Textractor + GameSentenceMiner + Yomitan + LunaTranslator stacked together.
+Most of the Japanese-VN learning stack on macOS is duct tape: `owocr` piping text into a browser running [Renji](https://renji-xd.github.io/texthooker-ui/) or [Kizuna](https://kizuna-texthooker-ui.app/), Yomitan in that browser for popups, copy-paste into DeepL in another tab for whole-line translation. On Windows it's Textractor + GameSentenceMiner + Yomitan + LunaTranslator.
 
-Yomiko bundles all of that into one Electron app with a coherent UX:
+Yomiko packages the same workflow into one app:
 
-- **Capture any window**, no setup beyond picking it from a list
-- **Hover over the game's own rendered text** for Yomitan-quality dictionary popups (no parsed-text duplicate bar — the popups attach to the actual VN characters via screen-coord hit zones)
-- **Whole-line machine translation** via DeepL, shown in a strip beneath the source — additive to the popups, not replacing them
-- **Sentence mining to Anki** on a hotkey *(planned)*
-- **Textractor WebSocket source** as a power-user fallback for ornamented titles where OCR struggles
+- **Capture any window** with one click from a picker.
+- **Hover popups attach to the VN's own rendered text** via screen-coord hit zones. No parsed-text duplicate bar.
+- **DeepL translation** for the whole line, shown beneath the source. Coexists with the popups.
+- **Sentence mining to Anki** on a hotkey *(planned)*.
+- **Textractor WebSocket source** as a fallback for ornamented titles where OCR struggles.
 
-The hover-on-text architecture is the load-bearing UX bet — see [PLAN.md](PLAN.md) for the design rationale and what got rejected along the way.
+[PLAN.md](PLAN.md) covers the architecture and the approaches that got rejected.
 
 ## Status
 
-- **macOS**: validated end-to-end on Apple Silicon (Sonoma+). Apple Vision OCR via a Swift sidecar; window position tracking via `CGWindowListCopyWindowInfo`. Hover popups, machine translation, dictionary lookup, deinflection all working.
-- **Windows**: in progress. The Win OCR sidecar (`Windows.Media.Ocr` via C#) exists in source but needs compilation + per-line bbox extension. A `DwmGetWindowAttribute`-based window-info sidecar still needs to be written.
-- **Distribution**: dev-only right now. Code signing, notarization, and auto-updater land in a later ship.
-
-See [PLAN.md](PLAN.md) for the ship-by-ship breakdown.
+- **macOS**: working end-to-end on Apple Silicon (Sonoma+). Apple Vision OCR via a Swift sidecar, window position via `CGWindowListCopyWindowInfo`. Hover popups, dictionary lookup, deinflection, and machine translation are all functional.
+- **Windows**: in progress. The OCR sidecar (`Windows.Media.Ocr` via C#) exists in source; it needs compilation and per-line bbox extension. A `DwmGetWindowAttribute`-based window-info sidecar still needs to be written.
+- **Distribution**: dev-only. Code signing, notarization, and auto-updater are later work.
 
 ## Quick start
 
 ```bash
 npm install                # also builds Mac sidecars via postinstall
 npm run build:dict         # one-time: builds the JMdict SQLite
-export DEEPL_API_KEY=...   # optional; without it, popups still work, translations just don't render
+export DEEPL_API_KEY=...   # optional; popups work without it
 npm run dev
 ```
 
-Then click **select source** in the overlay, pick a window with Japanese text, and hover.
+Click **select source** in the overlay, pick a window with Japanese text, hover.
 
-For development without a real VN: `window.vnr.openTestVN()` in DevTools opens a fake VN window with eight scripted lines (→/Space to advance).
+For development without a real VN: `window.vnr.openTestVN()` in DevTools opens a fake VN with eight scripted lines (→ / Space to advance).
 
 ## Stack
 
@@ -55,11 +53,11 @@ For development without a real VN: `window.vnr.openTestVN()` in DevTools opens a
 | Mac OCR | Apple Vision via Swift sidecar |
 | Mac window tracking | CGWindowListCopyWindowInfo via Swift sidecar |
 | Win OCR (in progress) | Windows.Media.Ocr via C# sidecar |
-| Translation | DeepL Free/Pro via REST (pluggable `Translator` interface; DeepSeek + LLM-via-OpenAI-compatible queued) |
+| Translation | DeepL Free/Pro via REST. Pluggable `Translator` interface; DeepSeek and OpenAI-compatible LLM backends queued. |
 
 ## License
 
-TBD — currently all rights reserved. License selection is part of the pre-release distribution work.
+TBD. All rights reserved until I pick one.
 
 ---
 
