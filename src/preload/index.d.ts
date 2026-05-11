@@ -9,7 +9,8 @@ import {
   CaptureFramePayload,
   HoverHotkey,
   HoverZonePayload,
-  TranslationPayload
+  RegionTranslationPayload,
+  TranslateRegionRequest
 } from '@shared/ipc'
 
 export interface DevRenderOptions {
@@ -38,7 +39,8 @@ export interface VnrApi {
   onStatus: (cb: (s: SourceStatus) => void) => () => void
   onHoverZones: (cb: (payload: HoverZonePayload) => void) => () => void
   onHoverHotkey: (cb: (key: HoverHotkey) => void) => () => void
-  onTranslation: (cb: (payload: TranslationPayload) => void) => () => void
+  translateRegion: (req: TranslateRegionRequest) => void
+  onRegionTranslation: (cb: (payload: RegionTranslationPayload) => void) => () => void
 }
 
 declare global {

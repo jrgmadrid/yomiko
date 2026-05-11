@@ -238,7 +238,7 @@ Implements the context-bias fix from the 2026-05-10 investigation: re-OCR the *o
 - [ ] **Windows parity.** Refinement only fires when first-pass `OcrLine.chars` is populated; `WindowsMediaBackend` currently emits empty `chars[]`. When the Win sidecar gains bbox extension, this call site works as-is.
 - [ ] **Companion memory was missing.** PLAN.md previously referenced `project_vision_context_bias.md` with empirical data; that file was never written and the load-bearing data is lost. v2 was designed from the user's verbal description of the pattern, not that table — if the data is recoverable from session logs the heuristic could be tightened further.
 
-### Ship 2.8 — On-hover VLM translation (Qwen2.5-VL via proxy) — **NEXT** (2026-05-11)
+### Ship 2.8 — On-hover VLM translation (Qwen2.5-VL via proxy) — **SHIPPED 2026-05-11**
 
 The real-VN dogfood that gated Ship 2.5 finally ran (Ren'Py JP title, free itch.io). **OCR pipeline holds up on real games** — the major outstanding worry from PLAN.md is resolved. What it *did* surface is a different load-bearing problem: real game screens contain many distinct text regions (dialogue box, character name, choice bubbles, tutorial overlays, menu chrome, title), and the current pipeline concatenates *all* of them into a single emit which DeepSeek then translates as one run-on blob. Even when OCR is accurate, the product output is unreadable.
 
@@ -282,6 +282,25 @@ The real-VN dogfood that gated Ship 2.5 finally ran (Ren'Py JP title, free itch.
 - Mining screenshot source: re-capture from live source (fresher) vs crop from the OCR PNG (deterministic, matches what VLM saw). Lean PNG crop for reproducibility.
 
 **Explicit non-goal: chrome detection.** Window titles, menu bars, save/load buttons appear in Apple Vision's OCR output, but users don't hover them → no `translateRegion` fires → zero VLM cost. The user-visible win comes from gating translation behind hover, not from heuristically classifying chrome (brittle across games — Ren'Py via SDL renders in-content titles; native-chrome games use macOS title bars).
+
+**Shipped (2026-05-11) — what actually landed:**
+- [x] Cloudflare Worker `/v1/vision` route forwards to OpenRouter `qwen/qwen2.5-vl-72b-instruct`. Defensive JSON parse strips markdown fences. Deployed at `yomiko-proxy.madrid-jacobr.workers.dev`.
+- [x] `src/main/translate/vlm.ts` — caller-supplied cache key (Vision first-pass text). Pivoted from PNG-byte hash mid-implementation: pixel-different frames of held scenes hash differently, text-key dedupes across animation/cursor noise. LRU 200.
+- [x] `Channels.translateRegion` + `Channels.regionTranslation` IPC; `HoverZone` gained `lineIdx`; `FrameOcrData` gained `png` (so the main-side latch can re-crop without re-capturing).
+- [x] Single `latestFrame` latch in main replaces per-path `testVnFrameId`/`realFrameId`. `cropAroundLine` expands by ~1.5× line-height vertically + 0.2× horizontally; `handleTranslateRegion` validates frameId and bails on stale.
+- [x] Renderer: debounced (250ms) `translateRegion` keyed on `(lineIdx, frameId)`. Translation overlay anchored to union-of-zones rect for the hovered line (no jitter on token panning). Render-time gating with double-stamping (positional id + frameId) — positional ids reuse across frames so frameId is load-bearing for staleness.
+- [x] **Dictionary popup migrated to VLM transcription** (post-implementation change): hover popup tokenizes VLM text, finds the group spanning the hovered zone's `[start,end]`, looks up the corrected token. Fixes Vision's substitution bias on the popup itself (e.g., Test VN line 9's 信 misread as 言). Popup shows shimmer until VLM lands; single source of truth.
+- [x] **Shift-gated dict** (post-implementation UX call): bare hover → translation overlay only (yomiko's USP); Shift+hover → adds dict popup. Inverted Yomitan-idiom: dict is opt-in, translation is default. Rationale in memory `project_ship_2_8_vlm_first.md`. Dict lookup IPC is gated on `shiftHeld` so users who never drill down pay zero kuromoji+sqlite cost.
+- [x] **Deleted** the full-frame text-translation stack: `src/main/translate/{index,deepl,deepseek,proxy,types}.ts`. With the call site gone, the modules had zero callers. Git history retains them for restoration if needed.
+
+**Net diff:** +530 / -594 LOC across 17 files (one new, five deleted, rest modified). The deletion of the text-translation stack offsets the new VLM path, plus the renderer + main reorganization.
+
+**Open follow-ups deferred to 2.9 or later** (deliberately not in this ship):
+1. *"Translate now" hotkey* (Cmd+Shift+T?) to bypass the 250 ms dwell on confirmed-stable text.
+2. *Vision-blind-spot fallback.* Current architecture is gated on Vision producing at least one line — if Vision returns zero lines (calligraphic title cards, Buddhist mantra scenes Kajiri-Kamui-Kagura-tier, super-stylized fonts), there are no hover zones and the entire VLM path stays dormant. Candidate fixes: (a) hotkey-triggered full-frame VLM call when user knows Vision is failing; (b) automatic full-frame VLM fallback when `OcrResult.lines.length === 0`, displayed as a centered overlay; (c) user-drag-a-box region selection. Hotkey (a) is the simplest opt-in.
+3. *Shift stationary-hover edge case.* Mousemove samples `e.shiftKey`; pressing Shift after entering a zone without any motion doesn't toggle the popup until pointer nudges. Plausible workaround: global hotkey to "lock" shift state.
+4. *32B vs 72B variant default* — config knob (env or settings.json), 72B as default.
+5. *Mining (Ship 3)* unblocked — payload pieces are now in the main-side latch.
 
 ### Ship 3 — Sentence mining
 

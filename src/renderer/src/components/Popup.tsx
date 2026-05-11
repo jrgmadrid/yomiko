@@ -2,7 +2,11 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { SharedLookupResult, SharedJmdictEntry } from '@shared/ipc'
 
 interface Props {
-  data: SharedLookupResult
+  /** Lookup result. Null means "still loading" — render the popup chrome
+   *  with a shimmer so the user gets immediate visual feedback that hover
+   *  was registered, even though the dictionary entry depends on the VLM
+   *  transcription that's still in flight. */
+  data: SharedLookupResult | null
   anchor: HTMLElement
 }
 
@@ -49,9 +53,7 @@ export function Popup({ data, anchor }: Props): React.JSX.Element | null {
     setPos({ left, top })
   }, [anchor, data])
 
-  if (data.entries.length === 0) return null
-
-  const entries = data.entries.slice(0, MAX_ENTRIES)
+  if (data && data.entries.length === 0) return null
 
   return (
     <div
@@ -63,7 +65,15 @@ export function Popup({ data, anchor }: Props): React.JSX.Element | null {
         opacity: pos ? 1 : 0
       }}
     >
-      {entries.map((entry, i) => (
+      {data === null ? (
+        <div className="space-y-2">
+          <div className="vnr-shimmer h-7 w-24 rounded-md" />
+          <div className="vnr-shimmer h-4 w-56 rounded-md" />
+          <div className="vnr-shimmer mt-3 h-4 w-64 rounded-md" />
+          <div className="vnr-shimmer h-4 w-48 rounded-md" />
+        </div>
+      ) : (
+        data.entries.slice(0, MAX_ENTRIES).map((entry, i) => (
         <div key={entry.id} className={i > 0 ? 'mt-3 border-t border-white/10 pt-3' : ''}>
           <div className="flex items-baseline gap-3">
             <span className="text-2xl font-medium text-white">{headlineForm(entry)}</span>
@@ -92,7 +102,8 @@ export function Popup({ data, anchor }: Props): React.JSX.Element | null {
             ))}
           </div>
         </div>
-      ))}
+        ))
+      )}
     </div>
   )
 }

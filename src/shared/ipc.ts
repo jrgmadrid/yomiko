@@ -17,16 +17,31 @@ export const Channels = {
   devOpenTestVN: 'dev:open-test-vn',
   hoverZones: 'hover:zones',
   hoverHotkey: 'hover:hotkey',
-  translateLine: 'translate:line'
+  translateRegion: 'translate:region',
+  regionTranslation: 'region:translation'
 } as const
 
-export interface TranslationPayload {
-  /** Original source text — lets the renderer ignore stale translations
-   *  when a newer line has already arrived. */
-  source: string
+/** Renderer → main: asks the VLM to transcribe+translate the region around
+ *  a hovered line. The main process validates `frameId` against its latest
+ *  captured frame and silently drops the request if stale (a newer frame
+ *  has arrived since the hover started). */
+export interface TranslateRegionRequest {
+  frameId: number
+  lineIdx: number
+}
+
+/** Main → renderer: VLM result for a specific hover. The renderer matches
+ *  `frameId + lineIdx` against the currently-hovered zone to ignore stale
+ *  responses (the user has since moved off the hovered line). */
+export interface RegionTranslationPayload {
+  frameId: number
+  lineIdx: number
+  /** VLM-transcribed Japanese text. May differ from Apple Vision's first-pass
+   *  (the divergence is the value-add — VLM fixes substitution and vocab
+   *  gaps). */
   text: string
-  from: string
-  to: string
+  /** English translation produced in the same VLM call. */
+  translation: string
 }
 
 export type HoverHotkey = 'toggle-mode' | 'toggle-debug'
@@ -127,6 +142,9 @@ export interface SharedScreenRect {
 export interface HoverZone {
   /** Stable id within the frame so React can key and skip rerenders. */
   id: number
+  /** Index into OcrResult.lines this zone belongs to. Used as the routing
+   *  key for translateRegion (which line to crop + send to the VLM). */
+  lineIdx: number
   /** Token surface (joined kanji/kana). */
   surface: string
   /** Char offsets in lineText (inclusive start, exclusive end). */

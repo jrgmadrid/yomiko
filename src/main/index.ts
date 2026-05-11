@@ -1,4 +1,4 @@
-import { app, ipcMain, BrowserWindow, screen, globalShortcut } from 'electron'
+import { app, ipcMain, BrowserWindow, nativeImage, screen, globalShortcut } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createOverlayWindow } from './window'
 import { Channels, type SetIgnorePayload } from '@shared/ipc'
@@ -7,7 +7,7 @@ import { ManualPasteSource } from './sources/ManualPasteSource'
 import { OCRSource } from './sources/OCRSource'
 import { AppleVisionBackend } from './ocr/apple-vision'
 import { WindowsMediaBackend } from './ocr/windows-media'
-import { ocrResultToText, type OcrBackend, type OcrResult } from './ocr/types'
+import { ocrResultToText, type OcrBackend, type OcrRect, type OcrResult } from './ocr/types'
 import { refineResult } from './ocr/refine'
 import { buildHoverZones, hoverPayload } from './ocr/hover-zones'
 import { MacWindowInfo, type WindowBounds } from './window-info/macos'
@@ -16,7 +16,7 @@ import { groupTokens } from './tokenize/grouping'
 import type { FrameOcrData } from './sources/types'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
 import { lookupGroup } from './dict/deinflect'
-import { translateLine, closeTranslator } from './translate'
+import { translateRegionImage } from './translate/vlm'
 import { listWindows } from './capture/picker'
 import {
   configureDisplayMediaHandler,
@@ -27,13 +27,14 @@ import {
 import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
+  RegionTranslationPayload,
   SharedJmdictEntry,
   SharedJmdictSense,
   SharedLookupResult,
   SharedRegion,
   SharedWindowSource,
   SharedWordGroup,
-  TranslationPayload
+  TranslateRegionRequest
 } from '@shared/ipc'
 
 let overlay: BrowserWindow | null = null
@@ -41,46 +42,13 @@ const sources: TextSource[] = []
 let manualSource: ManualPasteSource | null = null
 let ocrSource: OCRSource | null = null
 
-// Single seam for line-emit so translation hooks at one point. All call sites
-// (Textractor/manual-paste via bindSource, Test VN poll, devOcrTest) go
-// through here. Translation is fire-and-forget; failure or no-key disables
-// it silently and the source line still ships immediately.
-//
-// `text` is what the renderer displays (full OCR result). The translation
-// candidate is text with non-JP lines stripped, so when OCR pulls in chrome
-// like "[game scene]" alongside the actual VN line, we don't pay DeepSeek
-// to translate the chrome (and the user doesn't see a translation that
-// mostly repeats English they can already read).
-//
-// Hiragana, katakana, CJK ideographs (incl. extension A and compat) — same
-// predicate as ocr/hover-zones.ts hasJapanese, kept inline so the import
-// graph stays clean.
-const JAPANESE_REGEX = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
-
+// Ships the displayed text to the renderer. Translation runs separately on
+// hover (Ship 2.8): a single emit on a multi-region screen would dump every
+// text block into one VLM call — wasteful and ineffective. The renderer
+// triggers translateRegion per hovered line instead.
 function emitTextLine(text: string): void {
   if (!overlay || overlay.isDestroyed()) return
   overlay.webContents.send(Channels.textLine, text)
-
-  const translatable = text
-    .split('\n')
-    .filter((line) => JAPANESE_REGEX.test(line))
-    .join('\n')
-    .trim()
-  if (!translatable) return
-
-  void translateLine(translatable).then((result) => {
-    if (!result || !overlay || overlay.isDestroyed()) return
-    // `source` echoes the displayed text so the renderer can match the
-    // translation to the displayed line; the translatable subset is an
-    // implementation detail of what we sent upstream.
-    const payload: TranslationPayload = {
-      source: text,
-      text: result.text,
-      from: result.from,
-      to: result.to
-    }
-    overlay.webContents.send(Channels.translateLine, payload)
-  })
 }
 
 // ===== Test VN capturePage path =====
@@ -105,15 +73,27 @@ let testVnRegion: SharedRegion | null = null
 let testVnInFlight = false
 let testVnLastEmit = ''
 let testVnLastPng: Buffer | null = null
-let testVnFrameId = 0
 
 // Real-window (non-Test-VN) hover-zone state. activeSourceWindowId is the
 // CGWindowID parsed from the desktopCapturer source ID when the user picks
 // a window. windowInfoBackend is the persistent Swift sidecar that returns
 // bounds for that window each time we map an OCR'd bbox to screen coords.
 let activeSourceWindowId: number | null = null
-let realFrameId = 0
 let windowInfoBackend: MacWindowInfo | null = null
+
+// Latest-frame latch shared by both capture paths. Hover-driven VLM
+// translation crops from this PNG using the line bbox indexed by the
+// renderer's TranslateRegionRequest. Stale `translateRegion` calls (older
+// frame than the current latch) are silently dropped — the renderer has
+// already moved on by the time the IPC arrives.
+interface LatestFrame {
+  frameId: number
+  png: Buffer
+  result: OcrResult
+  region: SharedRegion
+}
+let frameCounter = 0
+let latestFrame: LatestFrame | null = null
 
 function getWindowInfo(): MacWindowInfo | null {
   if (process.platform !== 'darwin') return null
@@ -154,7 +134,7 @@ async function pollTestVnFrame(): Promise<void> {
       console.log('[test-vn] emit:', trimmed)
       emitTextLine(trimmed)
     }
-    await emitTestVnHoverZones(result, r)
+    await emitTestVnHoverZones(result, r, png)
   } catch (err) {
     console.error('[test-vn poll] failed:', (err as Error).message)
   } finally {
@@ -169,14 +149,20 @@ async function pollTestVnFrame(): Promise<void> {
 //   - Real third-party windows: macos-window-info sidecar (kCGWindowBounds).
 //     SCK captures the full framed window and CG bounds match it.
 // Win parity will add a third branch (windows-window-info via DwmGetWindowAttribute).
+//
+// Stashes the (frameId, png, result, region) tuple in latestFrame so the
+// translateRegion IPC handler can crop the PNG by line bbox without
+// re-capturing or re-running OCR.
 async function emitHoverZonesFor(
   label: 'test-vn' | 'real-window',
   result: OcrResult,
   region: SharedRegion,
   captureOrigin: { x: number; y: number },
-  frameId: number
+  png: Buffer
 ): Promise<void> {
   if (!overlay || overlay.isDestroyed()) return
+  const frameId = ++frameCounter
+  latestFrame = { frameId, png, result, region }
   const overlayBounds = overlay.getContentBounds()
   const display = screen.getDisplayMatching({
     x: captureOrigin.x,
@@ -197,10 +183,14 @@ async function emitHoverZonesFor(
   overlay.webContents.send(Channels.hoverZones, payload)
 }
 
-async function emitTestVnHoverZones(result: OcrResult, region: SharedRegion): Promise<void> {
+async function emitTestVnHoverZones(
+  result: OcrResult,
+  region: SharedRegion,
+  png: Buffer
+): Promise<void> {
   if (!testVnWindow || testVnWindow.isDestroyed()) return
   const winBounds = testVnWindow.getContentBounds()
-  await emitHoverZonesFor('test-vn', result, region, winBounds, ++testVnFrameId)
+  await emitHoverZonesFor('test-vn', result, region, winBounds, png)
 }
 
 async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
@@ -218,7 +208,58 @@ async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
     console.log(`[real-window] window ${activeSourceWindowId} not on-screen`)
     return
   }
-  await emitHoverZonesFor('real-window', data.result, data.region, bounds, ++realFrameId)
+  await emitHoverZonesFor('real-window', data.result, data.region, bounds, data.png)
+}
+
+// Crop the source PNG around a single OCR'd line, with generous vertical
+// padding so the VLM sees wrapped continuations and surrounding context.
+// Total expansion is ~1.5× line height — enough to catch one wrapped line
+// above and one below without dragging in unrelated chrome blocks.
+function cropAroundLine(png: Buffer, rect: OcrRect): Buffer | null {
+  const img = nativeImage.createFromBuffer(png)
+  const { width: imgW, height: imgH } = img.getSize()
+  const vPad = Math.round(rect.h * 0.75)
+  const hPad = Math.round(rect.h * 0.2)
+  const x = Math.max(0, Math.floor(rect.x - hPad))
+  const y = Math.max(0, Math.floor(rect.y - vPad))
+  const w = Math.min(imgW - x, Math.ceil(rect.w + hPad * 2))
+  const h = Math.min(imgH - y, Math.ceil(rect.h + vPad * 2))
+  const cropped = img.crop({ x, y, width: w, height: h })
+  return cropped.isEmpty() ? null : cropped.toPNG()
+}
+
+async function handleTranslateRegion(req: TranslateRegionRequest): Promise<void> {
+  const frame = latestFrame
+  if (!frame || frame.frameId !== req.frameId) {
+    console.log(
+      `[translate-region] stale frameId ${req.frameId} (current ${frame?.frameId ?? 'none'}); dropping`
+    )
+    return
+  }
+  const line = frame.result.lines[req.lineIdx]
+  if (!line) {
+    console.warn(`[translate-region] no line ${req.lineIdx} in frame ${req.frameId}`)
+    return
+  }
+  const crop = cropAroundLine(frame.png, line.rect)
+  if (!crop) {
+    console.warn(`[translate-region] crop empty for line ${req.lineIdx}`)
+    return
+  }
+  const cacheKey = line.text.trim()
+  console.log(
+    `[translate-region] frame=${req.frameId} line=${req.lineIdx} crop=${crop.length}B firstPass="${cacheKey}"`
+  )
+  const result = await translateRegionImage(crop, cacheKey)
+  if (!result) return
+  if (!overlay || overlay.isDestroyed()) return
+  const payload: RegionTranslationPayload = {
+    frameId: req.frameId,
+    lineIdx: req.lineIdx,
+    text: result.text,
+    translation: result.translation
+  }
+  overlay.webContents.send(Channels.regionTranslation, payload)
 }
 
 function startTestVnPoll(region: SharedRegion): void {
@@ -358,6 +399,10 @@ app.whenReady().then(async () => {
     void src.ingestFrame(payload)
   })
 
+  ipcMain.on(Channels.translateRegion, (_event, req: TranslateRegionRequest) => {
+    void handleTranslateRegion(req)
+  })
+
   ipcMain.handle(
     Channels.regionsGet,
     async (_event, windowName: string): Promise<SharedRegion | null> => getRegion(windowName)
@@ -469,7 +514,6 @@ app.on('will-quit', () => {
 app.on('before-quit', async () => {
   await Promise.all(sources.map((s) => s.stop()))
   await windowInfoBackend?.close()
-  await closeTranslator()
   jmdictClose()
 })
 

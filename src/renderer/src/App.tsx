@@ -10,8 +10,7 @@ import type {
   SharedLookupResult,
   SharedWindowSource,
   SharedWordGroup,
-  SourceStatus,
-  TranslationPayload
+  SourceStatus
 } from '@shared/ipc'
 
 interface RenderedLine {
@@ -22,11 +21,6 @@ interface RenderedLine {
 
 const HISTORY_LIMIT = 1
 let nextLineId = 1
-
-// Mirrors src/main/index.ts JAPANESE_REGEX. Inline here so the renderer can
-// decide whether to expect a translation (and render a loading state) without
-// piping per-line metadata through the IPC.
-const JAPANESE_REGEX = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
 
 function App(): React.JSX.Element {
   const [lines, setLines] = useState<RenderedLine[]>([])
@@ -50,11 +44,6 @@ function App(): React.JSX.Element {
   const [hoverPayload, setHoverPayload] = useState<HoverZonePayload | null>(null)
   useEffect(() => window.vnr.onHoverZones(setHoverPayload), [])
 
-  // Translation strip: keyed by source so we can drop stale translations
-  // (line N+1 arrived before line N's translation came back).
-  const [translation, setTranslation] = useState<TranslationPayload | null>(null)
-  useEffect(() => window.vnr.onTranslation(setTranslation), [])
-
   useEffect(() => attachClickThrough(), [])
 
   useEffect(
@@ -70,9 +59,6 @@ function App(): React.JSX.Element {
     () =>
       window.vnr.onLine(async (text) => {
         console.log('[overlay] text:line received:', text)
-        // Clear any prior translation immediately so we don't briefly show
-        // line N's translation under line N+1's source.
-        setTranslation((cur) => (cur && cur.source === text ? cur : null))
         try {
           const groups = await window.vnr.tokenize(text)
           console.log('[overlay] tokenized', groups.length, 'groups')
@@ -181,29 +167,6 @@ function App(): React.JSX.Element {
               )}
             </div>
           )}
-          {(() => {
-            const currentLine = lines[lines.length - 1]
-            if (!currentLine || !JAPANESE_REGEX.test(currentLine.text)) return null
-            const matched =
-              translation && translation.source === currentLine.text ? translation : null
-            // EN translation char count ≈ 1.5× source JP, but EN glyphs render
-            // ~half as wide as JP, so total bar width tracks ~10px per source
-            // char rather than naively scaling by the char-count ratio.
-            // Clamped to keep short lines visible and long lines bounded.
-            const skeletonPx = Math.min(480, Math.max(80, currentLine.text.length * 10))
-            return (
-              <div className="shrink-0 border-t border-white/10 pt-2 text-sm leading-relaxed">
-                {matched ? (
-                  <span className="text-white/60">{matched.text}</span>
-                ) : (
-                  <div
-                    className="vnr-shimmer h-[1.1em] rounded-md"
-                    style={{ width: `${skeletonPx}px` }}
-                  />
-                )}
-              </div>
-            )
-          })()}
         </div>
         {lookup && hoveredAnchor && <Popup data={lookup} anchor={hoveredAnchor} />}
       </div>

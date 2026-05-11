@@ -75,7 +75,8 @@ export async function buildHoverZones(
   const zones: HoverZone[] = []
   let zoneId = 0
 
-  for (const line of result.lines) {
+  for (let lineIdx = 0; lineIdx < result.lines.length; lineIdx++) {
+    const line = result.lines[lineIdx]!
     if (line.chars.length === 0) continue
     if (!hasJapanese(line.text)) continue
 
@@ -107,6 +108,7 @@ export async function buildHoverZones(
 
       zones.push({
         id: zoneId++,
+        lineIdx,
         surface: g.surface,
         start: g.start,
         end: g.end,

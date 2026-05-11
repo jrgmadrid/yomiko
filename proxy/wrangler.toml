@@ -3,8 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2026-05-10"
 
 # Secrets are set out-of-band via:
-#   wrangler secret put DEEPSEEK_API_KEY
-#   wrangler secret put PROXY_SHARED_TOKEN
+#   wrangler secret put DEEPSEEK_API_KEY      # text translation (Ship 2)
+#   wrangler secret put OPENROUTER_API_KEY    # VLM transcribe+translate (Ship 2.8)
+#   wrangler secret put PROXY_SHARED_TOKEN    # client auth
 # They never live in this file or in git.
 
 # Optional observability — uncomment after first deploy if you want logs in
