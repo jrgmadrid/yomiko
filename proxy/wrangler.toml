@@ -1,0 +1,13 @@
+name = "yomiko-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-05-10"
+
+# Secrets are set out-of-band via:
+#   wrangler secret put DEEPSEEK_API_KEY
+#   wrangler secret put PROXY_SHARED_TOKEN
+# They never live in this file or in git.
+
+# Optional observability — uncomment after first deploy if you want logs in
+# the Cloudflare dashboard:
+# [observability]
+# enabled = true

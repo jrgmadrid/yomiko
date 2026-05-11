@@ -1,0 +1,16 @@
+{
+  "name": "yomiko-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker that forwards translation requests from the yomiko app to DeepSeek using the maintainer's API key.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251001.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.0.0"
+  }
+}
