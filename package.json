@@ -10,7 +10,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "setup": "tsx scripts/setup.ts",
-    "build:dict": "tsx scripts/build-dict.ts",
+    "build:dict": "npm rebuild better-sqlite3 && tsx scripts/build-dict.ts && electron-builder install-app-deps",
     "build:sidecar:mac": "bash vendor/macos-vision-ocr/build.sh && bash vendor/macos-window-info/build.sh",
     "build:sidecar:win": "powershell -ExecutionPolicy Bypass -File vendor/windows-media-ocr/build.ps1",
     "build:sidecars": "node -e \"const p=process.platform;if(p==='darwin')require('child_process').execSync('npm run build:sidecar:mac',{stdio:'inherit'});else if(p==='win32')require('child_process').execSync('npm run build:sidecar:win',{stdio:'inherit'});else console.log('No sidecar for platform '+p)\"",
