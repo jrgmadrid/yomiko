@@ -8,6 +8,7 @@ import { OCRSource } from './sources/OCRSource'
 import { AppleVisionBackend } from './ocr/apple-vision'
 import { WindowsMediaBackend } from './ocr/windows-media'
 import { ocrResultToText, type OcrBackend, type OcrResult } from './ocr/types'
+import { refineResult } from './ocr/refine'
 import { buildHoverZones, hoverPayload } from './ocr/hover-zones'
 import { MacWindowInfo, type WindowBounds } from './window-info/macos'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
@@ -103,6 +104,7 @@ let testVnPoll: NodeJS.Timeout | null = null
 let testVnRegion: SharedRegion | null = null
 let testVnInFlight = false
 let testVnLastEmit = ''
+let testVnLastPng: Buffer | null = null
 let testVnFrameId = 0
 
 // Real-window (non-Test-VN) hover-zone state. activeSourceWindowId is the
@@ -137,7 +139,14 @@ async function pollTestVnFrame(): Promise<void> {
     }
     const backend = getOrCreateOcrBackend()
     if (!backend) return
-    const result = await backend.recognize(cropped.toPNG())
+    const png = cropped.toPNG()
+    // Skip the OCR pipeline on byte-identical frames. The poll runs at 5fps
+    // but Test VN content holds between line advances; without this we'd
+    // re-OCR (and re-refine) the same line ~5 times a second.
+    if (testVnLastPng?.equals(png)) return
+    testVnLastPng = png
+    const firstPass = await backend.recognize(png)
+    const result = await refineResult(png, firstPass, backend)
     const trimmed = ocrResultToText(result).trim()
     if (!trimmed) return
     if (trimmed !== testVnLastEmit) {
@@ -145,9 +154,6 @@ async function pollTestVnFrame(): Promise<void> {
       console.log('[test-vn] emit:', trimmed)
       emitTextLine(trimmed)
     }
-    // Always emit hover zones on a successful OCR — the renderer might have
-    // toggled into hover mode after the last text change, in which case it
-    // missed the prior emit. 5fps is fine for a prototype.
     await emitTestVnHoverZones(result, r)
   } catch (err) {
     console.error('[test-vn poll] failed:', (err as Error).message)
@@ -218,6 +224,7 @@ async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
 function startTestVnPoll(region: SharedRegion): void {
   testVnRegion = region
   testVnLastEmit = ''
+  testVnLastPng = null
   if (testVnPoll) return
   console.log('[test-vn] capturePage poll starting at 5fps')
   testVnPoll = setInterval(pollTestVnFrame, 200)
@@ -231,6 +238,7 @@ function stopTestVnPoll(): void {
   }
   testVnRegion = null
   testVnLastEmit = ''
+  testVnLastPng = null
 }
 
 let ocrBackend: OcrBackend | null = null
@@ -377,7 +385,9 @@ app.whenReady().then(async () => {
   ipcMain.handle(Channels.devOcrTest, async (_event, png: ArrayBuffer): Promise<string> => {
     const backend = getOrCreateOcrBackend()
     if (!backend) throw new Error(`no OCR backend for platform ${process.platform}`)
-    const result = await backend.recognize(Buffer.from(png))
+    const buf = Buffer.from(png)
+    const firstPass = await backend.recognize(buf)
+    const result = await refineResult(buf, firstPass, backend)
     const trimmed = ocrResultToText(result).trim()
     if (trimmed) emitTextLine(trimmed)
     return trimmed

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 
-// Eight VN-flavored dialogue lines covering different conjugation
-// shapes so the OCR + tokenizer + JMdict roundtrip gets exercised.
+// VN-flavored dialogue lines covering different conjugation shapes so the
+// OCR + tokenizer + JMdict roundtrip gets exercised. Line 9 is a Ship 2.7
+// stress case: two pairs of bias-prone kanji (信×2, 言×2) — four
+// refinement candidates per OCR fire. If Vision misreads any combination
+// of them, the repeated-kanji heuristic should resolve every position.
 const LINES = [
   'こんにちは、私はテストです。',
   '今日はとても暑い日ですね。',
@@ -10,7 +13,8 @@ const LINES = [
   'お元気ですか？私は元気です。',
   '魔法少女たちは、世界を救うために戦った。',
   '何度言われても、信じられなかった。',
-  '猫が窓辺で眠っている。'
+  '猫が窓辺で眠っている。',
+  '信じる言葉、言える信頼。'
 ]
 
 export default function TestVN(): React.JSX.Element {

@@ -160,7 +160,7 @@ Validated against Test VN (capturePage path) and TextEdit (real-window path via 
 
 **What's left for Ship 2.5 → done-done:**
 
-- [ ] **Real-VN dogfood.** Same item from original Ship 2; now means "open a real Mac-native Japanese VN, point the picker at it, verify hover zones track the textbox as lines advance." Narcissu is gone (32-bit, blocked at Catalina). itch.io Ren'Py JP titles are the most accessible path.
+- [x] **Real-VN dogfood (2026-05-11).** Ren'Py JP itch.io title (異世界戦手は帰れない). Hover zones track correctly, OCR is accurate on real game text, capture/region/translate pipeline holds up end-to-end. The major finding from the session — multi-text-region screens overwhelm the current single-emit translation path — became Ship 2.8 below; not a Ship 2.5 blocker.
 - [ ] **Decouple zone re-emit from OCR fire cadence.** Static-window finding above is mitigated by App-level caching but the proper fix is a renderer→main "send latest" ping on hover-mode-on so we don't depend on stabilizer-fire timing.
 - [ ] **Multi-display / DPI scaling.** Untested across displays with different scale factors. The transform uses `screen.getDisplayMatching(bounds).scaleFactor` per emit, which should handle moves between displays, but unverified.
 - [ ] **Vertical text (tategaki).** Vision needs pre-rotated input; not handled. Many VNs use horizontal but vertical is a real gap.
@@ -195,6 +195,93 @@ Validation evidence (run on 2026-05-09):
 **Branch state:**
 - `main` is at `07c3065` (Ship 2.5 done; clean working tree before this update).
 - `experiment/vertical-and-upscale` (`69e8c24`) is now **detritus** w.r.t. Ship 2.6 — the diagnostic toggles (vertical pre-rotation, source upscaling) were validating a hypothesis we now know is the wrong layer. The three bug fixes on that branch (hash-on-output-canvas, initial-state propagation in `handlePickerConfirmed`, `OcrResult` carrying imageWidth/imageHeight) are still independently good and worth cherry-picking when we touch the OCR pipeline next.
+
+### Ship 2.7 — Per-character refinement OCR (repeated-kanji heuristic) — **VALIDATED** (2026-05-11)
+
+Implements the context-bias fix from the 2026-05-10 investigation: re-OCR the *original* PNG tight-cropped to one kanji at a time, so the surrounding line context that biases Vision toward earlier-occurring chars has no anchor.
+
+**Heuristic — "repeated kanji is suspect."** The 2026-05-11 dogfood confirmed the bias pattern's signature: when the source line contains a kanji X once and a visually-similar kanji Y once, Vision misreads Y → X, producing OCR text in which X appears **twice**. So: any kanji that appears more than once in a first-pass line is a refinement target. The correctly-read occurrence re-confirms (no-op); the misread occurrence re-reads as its true glyph because the cropped frame doesn't include the biasing earlier instance. (The original PLAN-prescribed "lemma+surface miss JMdict" rule was tried first and didn't fire on Test VN line 12 — `言` standalone *is* a JMdict noun entry, so the substituted `言`-for-`信` passed the filter. See "Heuristic history" below.)
+
+**Code path** (`src/main/ocr/refine.ts`, ~90 LOC):
+
+1. First-pass `backend.recognize(png)` runs as before.
+2. For each output line, count kanji-char occurrences. Any char with count > 1 contributes one entry per occurrence (so for `言…言`, two entries).
+3. For each occurrence, crop the original PNG around `line.chars[idx].rect` with 12px padding and re-invoke the same backend.
+4. Replacement is accepted only if Vision returns **exactly one CJK kanji** — multi-char output means stray glyphs leaked in from the padding, and splicing it into a single-char slot would corrupt the line.
+5. Accepted replacement updates `line.text[idx]` and `line.chars[idx].text` in place (single-char-for-single-char is length-preserving; rect is unchanged).
+
+`refineResult(png, firstPass, backend)` is invoked between recognize and emit in three OCR call sites: `OCRSource.ingestFrame` (real-window path), `pollTestVnFrame` (Test VN capturePage path), and the dev-only `devOcrTest` IPC handler.
+
+**Cost.** One extra Vision sidecar call per repeated-kanji occurrence; ~150ms each. Most VN lines have no kanji repeats (cost: zero). Lines that do have repeats are usually the substitution failure cases the heuristic targets — paying ~300ms (two occurrences) on the rare bad frame is acceptable for the correctness win.
+
+**Heuristic history (read before tweaking):**
+- **v1 (2026-05-11 morning) — "token-level lemma+surface miss JMdict."** Implementation in commits prior to this entry. **Did not fire on Test VN line 12** ("何度言われても、信じられなかった。" misread as "…言じられなかった。") because `言` alone has a JMdict noun entry, so the substituted token passed the filter. User confirmed: "DeepSeek figures out the line but the wrong word is emitted in the log." Replaced wholesale.
+- **v2 (current) — "kanji repeats in line."** Direct signature of the documented bias pattern. Doesn't require kuromoji tokenization or JMdict at all in the refinement path; the import surface dropped.
+
+**Failure modes worth knowing:**
+- A substituted kanji whose true source kanji *doesn't appear elsewhere in the line* won't be flagged (e.g., random visual-similarity misread with no biasing twin). Out of scope here; cloud-VLM fallback (Open Questions in this doc) is the future path.
+- Vision could in principle re-misread the tight crop as a *different* wrong kanji. The single-CJK-kanji acceptance gate limits damage but doesn't eliminate it. Worth watching during dogfood.
+
+**Files touched:**
+- `src/main/ocr/refine.ts` (new)
+- `src/main/sources/OCRSource.ts` (refine inside ingestFrame)
+- `src/main/index.ts` (refine in `pollTestVnFrame` + `devOcrTest`)
+
+**Validation (2026-05-11).** Confirmed on Test VN line 12:
+```
+[refine] 2 repeated-kanji occurrence(s) across 7 line(s)
+[refine] '言' @8 → '信'      ← screen-pixel 信 corrected (was misread as 言)
+[refine] '言' @2 confirmed   ← genuine 言 in 言われ re-read as 言
+```
+
+**Open items:**
+- [ ] **Windows parity.** Refinement only fires when first-pass `OcrLine.chars` is populated; `WindowsMediaBackend` currently emits empty `chars[]`. When the Win sidecar gains bbox extension, this call site works as-is.
+- [ ] **Companion memory was missing.** PLAN.md previously referenced `project_vision_context_bias.md` with empirical data; that file was never written and the load-bearing data is lost. v2 was designed from the user's verbal description of the pattern, not that table — if the data is recoverable from session logs the heuristic could be tightened further.
+
+### Ship 2.8 — On-hover VLM translation (Qwen2.5-VL via proxy) — **NEXT** (2026-05-11)
+
+The real-VN dogfood that gated Ship 2.5 finally ran (Ren'Py JP title, free itch.io). **OCR pipeline holds up on real games** — the major outstanding worry from PLAN.md is resolved. What it *did* surface is a different load-bearing problem: real game screens contain many distinct text regions (dialogue box, character name, choice bubbles, tutorial overlays, menu chrome, title), and the current pipeline concatenates *all* of them into a single emit which DeepSeek then translates as one run-on blob. Even when OCR is accurate, the product output is unreadable.
+
+**Concrete dogfood evidence (2026-05-11, 異世界戦手は帰れない HOW TO PLAY screen):**
+- 8+ separate text regions on one frame (title, 4 tutorial bubbles, two centered choice texts, character name, main dialogue line, menu bar items).
+- Single emit concatenates them. Translation: *"Otherworldly warriors cannot return. Choices marked with a dash at the beginning do not affect major story branches. - Me…? - Sen…shu…? Click or press the Enter key. …"* — every text region on screen mixed into one.
+
+**The architectural pivot — VLM-first, not text-clustering.** The original-sketched fix was line-clustering into spatial "blocks" plus per-block DeepSeek translation. That's vestigial work: a VLM (vision-language model) handles block scoping implicitly from a generously-padded image crop, and also fixes the Apple Vision substitution class (Ship 2.7's repeated-kanji bias residuals, rare-kanji vocab gap from Ship 2.6, and Vision-dropped-char failures) by doing OCR and translation in one call. Building the clustering layer first and then ripping it out when VLM lands is the messy path. Build the VLM path directly.
+
+**Model choice: Qwen2.5-VL via OpenRouter.** Ratifying 2026-05-11 (had been listed as a candidate in Ship 2.6 closeout alongside Claude vision / GPT-4o without a formal pick).
+- **Cost.** Qwen2.5-VL-72B on OpenRouter is ~$0.40/M input + $0.40/M output. Per-hover image-crop cost is well under $0.01; ~100 hovers/hour ≈ $0.05-0.10/hour. Claude Sonnet vision is 5-10× more, GPT-4o full similar to Claude. Per-hover usage shape makes cost matter; this is the right axis.
+- **JP quality.** Qwen2.5-VL trained heavily on Chinese AND Japanese; competitive with GPT-4o on JP document OCR specifically. Strong handling of vertical text (Ship 2.5 open item) and stylized fonts.
+- **Open weights = future-proof.** If hosted cost spikes or OpenRouter goes down, self-host via Ollama or MLX on M-series is a real fallback. Claude/GPT-4o have no such escape hatch.
+- **Existing proxy fit.** The Cloudflare Worker proxy already speaks OpenAI-compatible JSON to DeepSeek; OpenRouter is the same protocol. Adding a vision route is a small extension.
+
+**Architecture:**
+
+- **Apple Vision unchanged.** Still does per-frame OCR for hover-zone discovery, Ship 2.7 refinement, and dictionary popups via kuromoji + JMdict. None of that touches the translation path. This is the fast, free, local hot loop.
+- **Kill the full-frame translation path.** Stop firing `translate(emit_text)` on every OCR emit. The `[ocr-source] emit:` run-on text in dogfood is what we're eliminating.
+- **On-hover IPC: `translateRegion({ lineIdx })`.** Renderer fires this when the user lingers on a token (Yomitan-style ~250ms delay). Main resolves: takes the line bbox from the first-pass `OcrResult`, expands vertically by ~1.5× line height to catch wrapped sentences, crops the captured PNG to that region, forwards to the VLM proxy.
+- **Cloudflare Worker proxy: new `/v1/vision` route.** Accepts `{ image_b64, prompt }`, forwards to OpenRouter's `qwen/qwen2.5-vl-72b-instruct` (32B as cost-tier alternative), returns `{ text, translation }`. Same hosted-default + BYOK pattern as the DeepSeek path. Worker auth, rate limits, and key shielding stay where they are.
+- **Client: `src/main/translate/vlm.ts`.** New backend slotting in alongside `deepseek.ts`, `proxy.ts`, `deepl.ts`. Same lifecycle (`translateLine` / `closeTranslator`). Different cache key: per image-crop hash rather than per text hash (VLM's input is the image, not Vision's OCR'd string).
+- **Overlay UI: per-region display.** Shows only the currently-hovered region's original (from VLM, which may differ from Vision's first-pass) plus translation. Other regions sit muted or hidden — design choice for the iteration.
+
+**Why no clustering:** Qwen2.5-VL handles block scoping implicitly from a generously-padded crop. The user hovers anywhere in a wrapped sentence; the crop catches the surrounding lines via vertical padding; the VLM identifies the contiguous sentence and transcribes/translates it. Wrapped sentences are *common* in literary VNs (Higurashi-tier prose density) — they are not the exceptional case, and that's exactly why hand-rolled line clustering would have to handle them, and exactly why letting the VLM do it instead is the right scope cut.
+
+**Estimated scope.** Client-side ~170 LOC + Worker-side vision route (~50 LOC of TS + endpoint config). New `src/main/translate/vlm.ts`, edits to `src/main/index.ts` (drop full-frame translate emit, route hover IPC), `src/shared/ipc.ts` (new channel + payload types), renderer (hover trigger with debounce), overlay component (per-region display). ~1-2 days end-to-end including proxy work.
+
+**Ship 3 unblock.** Mining hotkey grabs `hovered_token + region.text + region.translation + screenshot_of_region_bbox`. Clean card, with VLM-corrected text instead of Vision's first-pass. Without this, mining would copy the same concatenated DeepSeek jumble.
+
+**Trade-offs (be honest about these):**
+- **Cloud-hardens the translation path.** Today, translation needs network but OCR doesn't. Post-2.8, hovers need network for everything beyond Vision's first-pass display.
+- **Single-vendor correlation on OCR+translation.** Today DeepSeek can be wrong about translation while Vision is right about text. Post-2.8 one model handles both — failure modes correlate. Mitigation: log Vision's first-pass text alongside VLM's transcription so divergences are visible.
+- **Latency: first-hover ~1-1.5s** (OpenRouter roundtrip). Cache makes repeat hovers free. VN scenes hold 10s+ so this is tolerable for reading, less so for skimming.
+- **No-API-key offline mode loses translation entirely** (dictionary popups still work). Same UX as today's no-backend-configured state — not a regression.
+
+**Open questions for the design pass:**
+- Hover delay: 250ms (Yomitan default) vs longer? With ~1s API roundtrip the total wait is ~1.25s; users may want a "translate now" hotkey to bypass the delay on confirmed-stable text.
+- Hide non-hovered regions vs muted-with-highlight? Muting preserves "where text is on screen" context; hiding is cleaner but loses scene awareness.
+- 72B vs 32B variant default? 72B is higher quality, 32B is ~3× cheaper. Probably 72B as default with a config knob.
+- Mining screenshot source: re-capture from live source (fresher) vs crop from the OCR PNG (deterministic, matches what VLM saw). Lean PNG crop for reproducibility.
+
+**Explicit non-goal: chrome detection.** Window titles, menu bars, save/load buttons appear in Apple Vision's OCR output, but users don't hover them → no `translateRegion` fires → zero VLM cost. The user-visible win comes from gating translation behind hover, not from heuristically classifying chrome (brittle across games — Ren'Py via SDL renders in-content titles; native-chrome games use macOS title bars).
 
 ### Ship 3 — Sentence mining
 

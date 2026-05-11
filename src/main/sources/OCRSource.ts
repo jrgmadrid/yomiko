@@ -2,6 +2,7 @@ import { TextSource } from './types'
 import { Stabilizer } from '../ocr/stabilizer'
 import { Deduper } from '../ocr/dedupe'
 import { hammingDistance } from '../ocr/hamming'
+import { refineResult } from '../ocr/refine'
 import { ocrResultToText, type OcrBackend } from '../ocr/types'
 import type { CaptureFramePayload } from '@shared/ipc'
 
@@ -68,7 +69,9 @@ export class OCRSource extends TextSource {
       `[ocr-source] FIRE @frame ${this.frameCount}; bytes=${payload.data.byteLength} hash=${payload.hash}`
     )
     try {
-      const result = await this.backend.recognize(Buffer.from(payload.data))
+      const png = Buffer.from(payload.data)
+      const firstPass = await this.backend.recognize(png)
+      const result = await refineResult(png, firstPass, this.backend)
       const trimmed = ocrResultToText(result).trim()
       if (!trimmed) {
         console.log('[ocr-source] empty OCR result')
