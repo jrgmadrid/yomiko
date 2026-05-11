@@ -57,7 +57,8 @@ import {
   type SharedRegion,
   type CaptureFramePayload,
   type HoverHotkey,
-  type HoverZonePayload
+  type HoverZonePayload,
+  type TranslationPayload
 } from '@shared/ipc'
 
 const vnr = {
@@ -130,6 +131,13 @@ const vnr = {
     ipcRenderer.on(Channels.hoverHotkey, listener)
     return () => {
       ipcRenderer.removeListener(Channels.hoverHotkey, listener)
+    }
+  },
+  onTranslation: (cb: (payload: TranslationPayload) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, payload: TranslationPayload): void => cb(payload)
+    ipcRenderer.on(Channels.translateLine, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.translateLine, listener)
     }
   }
 }

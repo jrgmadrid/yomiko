@@ -16,8 +16,18 @@ export const Channels = {
   devOcrTest: 'dev:ocr-test',
   devOpenTestVN: 'dev:open-test-vn',
   hoverZones: 'hover:zones',
-  hoverHotkey: 'hover:hotkey'
+  hoverHotkey: 'hover:hotkey',
+  translateLine: 'translate:line'
 } as const
+
+export interface TranslationPayload {
+  /** Original source text — lets the renderer ignore stale translations
+   *  when a newer line has already arrived. */
+  source: string
+  text: string
+  from: string
+  to: string
+}
 
 export type HoverHotkey = 'toggle-mode' | 'toggle-debug'
 

@@ -15,6 +15,7 @@ import { groupTokens } from './tokenize/grouping'
 import type { FrameOcrData } from './sources/types'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
 import { lookupGroup } from './dict/deinflect'
+import { translateLine, closeTranslator } from './translate'
 import { listWindows } from './capture/picker'
 import {
   configureDisplayMediaHandler,
@@ -30,13 +31,33 @@ import type {
   SharedLookupResult,
   SharedRegion,
   SharedWindowSource,
-  SharedWordGroup
+  SharedWordGroup,
+  TranslationPayload
 } from '@shared/ipc'
 
 let overlay: BrowserWindow | null = null
 const sources: TextSource[] = []
 let manualSource: ManualPasteSource | null = null
 let ocrSource: OCRSource | null = null
+
+// Single seam for line-emit so translation hooks at one point. All call sites
+// (Textractor/manual-paste via bindSource, Test VN poll, devOcrTest) go
+// through here. Translation is fire-and-forget; failure or no-key disables
+// it silently and the source line still ships immediately.
+function emitTextLine(text: string): void {
+  if (!overlay || overlay.isDestroyed()) return
+  overlay.webContents.send(Channels.textLine, text)
+  void translateLine(text).then((result) => {
+    if (!result || !overlay || overlay.isDestroyed()) return
+    const payload: TranslationPayload = {
+      source: text,
+      text: result.text,
+      from: result.from,
+      to: result.to
+    }
+    overlay.webContents.send(Channels.translateLine, payload)
+  })
+}
 
 // ===== Test VN capturePage path =====
 //
@@ -99,7 +120,7 @@ async function pollTestVnFrame(): Promise<void> {
     if (trimmed !== testVnLastEmit) {
       testVnLastEmit = trimmed
       console.log('[test-vn] emit:', trimmed)
-      overlay?.webContents.send(Channels.textLine, trimmed)
+      emitTextLine(trimmed)
     }
     // Always emit hover zones on a successful OCR — the renderer might have
     // toggled into hover mode after the last text change, in which case it
@@ -213,7 +234,7 @@ function getOrCreateOcrSource(): OCRSource | null {
 
 function bindSource(s: TextSource): void {
   s.on('text', (line) => {
-    overlay?.webContents.send(Channels.textLine, line)
+    emitTextLine(line)
   })
   s.on('status', (status) => {
     overlay?.webContents.send(Channels.textStatus, status)
@@ -335,9 +356,7 @@ app.whenReady().then(async () => {
     if (!backend) throw new Error(`no OCR backend for platform ${process.platform}`)
     const result = await backend.recognize(Buffer.from(png))
     const trimmed = ocrResultToText(result).trim()
-    if (trimmed && overlay && !overlay.isDestroyed()) {
-      overlay.webContents.send(Channels.textLine, trimmed)
-    }
+    if (trimmed) emitTextLine(trimmed)
     return trimmed
   })
 
@@ -417,6 +436,7 @@ app.on('will-quit', () => {
 app.on('before-quit', async () => {
   await Promise.all(sources.map((s) => s.stop()))
   await windowInfoBackend?.close()
+  await closeTranslator()
   jmdictClose()
 })
 

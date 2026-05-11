@@ -10,7 +10,8 @@ import type {
   SharedLookupResult,
   SharedWindowSource,
   SharedWordGroup,
-  SourceStatus
+  SourceStatus,
+  TranslationPayload
 } from '@shared/ipc'
 
 interface RenderedLine {
@@ -44,6 +45,11 @@ function App(): React.JSX.Element {
   const [hoverPayload, setHoverPayload] = useState<HoverZonePayload | null>(null)
   useEffect(() => window.vnr.onHoverZones(setHoverPayload), [])
 
+  // Translation strip: keyed by source so we can drop stale translations
+  // (line N+1 arrived before line N's translation came back).
+  const [translation, setTranslation] = useState<TranslationPayload | null>(null)
+  useEffect(() => window.vnr.onTranslation(setTranslation), [])
+
   useEffect(() => attachClickThrough(), [])
 
   useEffect(
@@ -59,6 +65,9 @@ function App(): React.JSX.Element {
     () =>
       window.vnr.onLine(async (text) => {
         console.log('[overlay] text:line received:', text)
+        // Clear any prior translation immediately so we don't briefly show
+        // line N's translation under line N+1's source.
+        setTranslation((cur) => (cur && cur.source === text ? cur : null))
         try {
           const groups = await window.vnr.tokenize(text)
           console.log('[overlay] tokenized', groups.length, 'groups')
@@ -165,6 +174,11 @@ function App(): React.JSX.Element {
                   />
                 ))
               )}
+            </div>
+          )}
+          {translation && translation.source === lines[lines.length - 1]?.text && (
+            <div className="shrink-0 border-t border-white/10 pt-2 text-sm leading-relaxed text-white/60">
+              {translation.text}
             </div>
           )}
         </div>
