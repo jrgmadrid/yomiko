@@ -10,11 +10,14 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { DeepLTranslator } from './deepl'
 import { DeepSeekTranslator } from './deepseek'
+import { ProxyTranslator } from './proxy'
 import { TranslateError, type Translator, type TranslateResult } from './types'
 
 const MAX_CACHE_ENTRIES = 1000
 
 interface SettingsShape {
+  proxyUrl?: string
+  proxyToken?: string
   deepSeekApiKey?: string
   deepLApiKey?: string
 }
@@ -25,24 +28,31 @@ let initFailed = false
 const cache = new Map<string, TranslateResult>()
 
 interface BackendChoice {
-  build: (key: string) => Translator
-  key: string
+  build: () => Translator
   label: string
 }
 
-// Precedence: DeepSeek first (cheap, sustained-use friendly, no quota
-// cliff), DeepL second (BYOK option for users with a Pro key from other
-// contexts). Whichever key is present wins; both unset = translation
-// disabled.
+// Precedence: hosted proxy first (the "just works" path — user doesn't
+// supply a key, the proxy holds the upstream key server-side), then
+// DeepSeek BYOK, then DeepL BYOK. Whichever set of credentials is present
+// wins; nothing configured = translation disabled.
 function pickBackend(): BackendChoice | null {
   const settings = readSettings()
+  const proxyUrl = (process.env.YOMIKO_PROXY_URL ?? settings.proxyUrl ?? '').trim()
+  const proxyToken = (process.env.YOMIKO_PROXY_TOKEN ?? settings.proxyToken ?? '').trim()
+  if (proxyUrl && proxyToken) {
+    return {
+      build: () => new ProxyTranslator(proxyUrl, proxyToken),
+      label: `proxy (${new URL(proxyUrl).host})`
+    }
+  }
   const dsKey = (process.env.DEEPSEEK_API_KEY ?? settings.deepSeekApiKey ?? '').trim()
   if (dsKey) {
-    return { build: (k) => new DeepSeekTranslator(k), key: dsKey, label: 'DeepSeek' }
+    return { build: () => new DeepSeekTranslator(dsKey), label: 'DeepSeek (BYOK)' }
   }
   const dlKey = (process.env.DEEPL_API_KEY ?? settings.deepLApiKey ?? '').trim()
   if (dlKey) {
-    return { build: (k) => new DeepLTranslator(k), key: dlKey, label: 'DeepL' }
+    return { build: () => new DeepLTranslator(dlKey), label: 'DeepL (BYOK)' }
   }
   return null
 }
@@ -62,13 +72,13 @@ function getTranslator(): Translator | null {
   const choice = pickBackend()
   if (!choice) {
     console.warn(
-      '[translate] no API key (set DEEPSEEK_API_KEY, DEEPL_API_KEY, or the equivalents in userData/settings.json); translation disabled'
+      '[translate] no backend configured (set YOMIKO_PROXY_URL+YOMIKO_PROXY_TOKEN, DEEPSEEK_API_KEY, DEEPL_API_KEY, or the equivalents in userData/settings.json); translation disabled'
     )
     initFailed = true
     return null
   }
   try {
-    translator = choice.build(choice.key)
+    translator = choice.build()
     console.log(`[translate] ${choice.label} backend ready`)
     return translator
   } catch (err) {

@@ -33,7 +33,16 @@ Yomiko packages the same workflow into one app:
 ```bash
 npm install                       # also builds Mac sidecars via postinstall
 npm run build:dict                # one-time: builds the JMdict SQLite
-export DEEPSEEK_API_KEY=...       # or DEEPL_API_KEY=...; either enables translation
+
+# Translation: pick one path. Proxy is preferred (no upstream key needed
+# locally); DeepSeek/DeepL are BYOK escape hatches.
+export YOMIKO_PROXY_URL=https://...      # hosted proxy (see proxy/README.md)
+export YOMIKO_PROXY_TOKEN=...            # token paired with the proxy
+# OR
+export DEEPSEEK_API_KEY=...              # BYOK DeepSeek
+# OR
+export DEEPL_API_KEY=...                 # BYOK DeepL
+
 npm run dev
 ```
 
@@ -53,7 +62,7 @@ For development without a real VN: `window.vnr.openTestVN()` in DevTools opens a
 | Mac OCR | Apple Vision via Swift sidecar |
 | Mac window tracking | CGWindowListCopyWindowInfo via Swift sidecar |
 | Win OCR (in progress) | Windows.Media.Ocr via C# sidecar |
-| Translation | DeepSeek (default) or DeepL (BYOK) via the pluggable `Translator` interface. OpenAI-compatible LLMs and a hosted proxy planned. |
+| Translation | Hosted Cloudflare Worker proxy (default) forwarding to DeepSeek-v4-flash. DeepSeek and DeepL backends available as BYOK escape hatches via the pluggable `Translator` interface. See [proxy/](proxy/) for the Worker source. |
 
 ## License
 
