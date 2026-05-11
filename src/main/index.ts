@@ -27,6 +27,7 @@ import {
 import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
+  ForceTranslationEvent,
   RegionTranslationPayload,
   SharedJmdictEntry,
   SharedJmdictSense,
@@ -262,6 +263,47 @@ async function handleTranslateRegion(req: TranslateRegionRequest): Promise<void>
   overlay.webContents.send(Channels.regionTranslation, payload)
 }
 
+// Cmd+Shift+T → translate the entire latest frame, bypassing hover zones.
+// Exists for the Vision-blind-spot case: stylized fonts, Buddhist mantra
+// scenes, calligraphic title cards where Vision returns zero lines and the
+// per-hover VLM path stays dormant because there's nothing to hover.
+// Toggling: a second press dismisses; a press during an in-flight fetch
+// cancels by dropping the eventual result.
+let forceOverlayShown = false
+
+function sendForce(event: ForceTranslationEvent): void {
+  overlay?.webContents.send(Channels.forceTranslation, event)
+}
+
+async function handleForceTranslate(): Promise<void> {
+  if (forceOverlayShown) {
+    forceOverlayShown = false
+    sendForce({ kind: 'dismiss' })
+    return
+  }
+  const frame = latestFrame
+  if (!frame) {
+    console.warn('[force-translate] no frame in latch yet')
+    return
+  }
+  forceOverlayShown = true
+  sendForce({ kind: 'start' })
+  const visionText = ocrResultToText(frame.result).trim()
+  // When Vision found something, key by that for cross-frame dedupe.
+  // When Vision found nothing (the named failure case this hotkey exists
+  // for), fall back to frameId — intra-frame dedupe only, which still
+  // covers "user pressed the hotkey twice in a row by accident."
+  const cacheKey = `force:${visionText || `frame:${frame.frameId}`}`
+  const result = await translateRegionImage(frame.png, cacheKey)
+  if (!forceOverlayShown) return // user dismissed mid-fetch
+  if (!result) {
+    forceOverlayShown = false
+    sendForce({ kind: 'dismiss' })
+    return
+  }
+  sendForce({ kind: 'result', text: result.text, translation: result.translation })
+}
+
 function startTestVnPoll(region: SharedRegion): void {
   testVnRegion = region
   testVnLastEmit = ''
@@ -482,8 +524,13 @@ app.whenReady().then(async () => {
   const okDebug = globalShortcut.register('CommandOrControl+Shift+D', () => {
     overlay?.webContents.send(Channels.hoverHotkey, 'toggle-debug')
   })
-  if (!okMode || !okDebug) {
-    console.warn(`[hotkeys] register failed: mode=${okMode}, debug=${okDebug}`)
+  const okForce = globalShortcut.register('CommandOrControl+Shift+T', () => {
+    void handleForceTranslate()
+  })
+  if (!okMode || !okDebug || !okForce) {
+    console.warn(
+      `[hotkeys] register failed: mode=${okMode}, debug=${okDebug}, force=${okForce}`
+    )
   }
 
   manualSource = new ManualPasteSource()

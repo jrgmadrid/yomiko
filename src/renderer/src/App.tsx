@@ -4,6 +4,7 @@ import { TokenLine } from './components/TokenLine'
 import { Popup } from './components/Popup'
 import { SourcePicker } from './components/SourcePicker'
 import { HoverProtoLayer } from './components/HoverProtoLayer'
+import { ForceTranslationOverlay } from './components/ForceTranslationOverlay'
 import type { CaptureHandle } from './lib/capture'
 import type {
   HoverZonePayload,
@@ -171,6 +172,7 @@ function App(): React.JSX.Element {
         {lookup && hoveredAnchor && <Popup data={lookup} anchor={hoveredAnchor} />}
       </div>
       {hoverMode && <HoverProtoLayer debug={hoverDebug} payload={hoverPayload} />}
+      <ForceTranslationOverlay />
       {pickerOpen && (
         <SourcePicker
           onClose={() => setPickerOpen(false)}

@@ -18,8 +18,20 @@ export const Channels = {
   hoverZones: 'hover:zones',
   hoverHotkey: 'hover:hotkey',
   translateRegion: 'translate:region',
-  regionTranslation: 'region:translation'
+  regionTranslation: 'region:translation',
+  forceTranslation: 'force:translation'
 } as const
+
+/** Main → renderer: full-frame VLM translate driven by the Cmd+Shift+T
+ *  hotkey. Three-state machine: `start` shows the loading state in the
+ *  centered overlay, `result` fills it with content, `dismiss` hides it.
+ *  Main tracks shown/hidden so a second hotkey press during an in-flight
+ *  fetch drops the eventual result on the floor rather than popping the
+ *  overlay back open. */
+export type ForceTranslationEvent =
+  | { kind: 'start' }
+  | { kind: 'result'; text: string; translation: string }
+  | { kind: 'dismiss' }
 
 /** Renderer → main: asks the VLM to transcribe+translate the region around
  *  a hovered line. The main process validates `frameId` against its latest

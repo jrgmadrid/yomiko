@@ -295,12 +295,12 @@ The real-VN dogfood that gated Ship 2.5 finally ran (Ren'Py JP title, free itch.
 
 **Net diff:** +530 / -594 LOC across 17 files (one new, five deleted, rest modified). The deletion of the text-translation stack offsets the new VLM path, plus the renderer + main reorganization.
 
-**Open follow-ups deferred to 2.9 or later** (deliberately not in this ship):
-1. *"Translate now" hotkey* (Cmd+Shift+T?) to bypass the 250 ms dwell on confirmed-stable text.
-2. *Vision-blind-spot fallback.* Current architecture is gated on Vision producing at least one line — if Vision returns zero lines (calligraphic title cards, Buddhist mantra scenes Kajiri-Kamui-Kagura-tier, super-stylized fonts), there are no hover zones and the entire VLM path stays dormant. Candidate fixes: (a) hotkey-triggered full-frame VLM call when user knows Vision is failing; (b) automatic full-frame VLM fallback when `OcrResult.lines.length === 0`, displayed as a centered overlay; (c) user-drag-a-box region selection. Hotkey (a) is the simplest opt-in.
-3. *Shift stationary-hover edge case.* Mousemove samples `e.shiftKey`; pressing Shift after entering a zone without any motion doesn't toggle the popup until pointer nudges. Plausible workaround: global hotkey to "lock" shift state.
-4. *32B vs 72B variant default* — config knob (env or settings.json), 72B as default.
-5. *Mining (Ship 3)* unblocked — payload pieces are now in the main-side latch.
+**Open follow-ups (some shipped post-merge):**
+1. [x] *Vision-blind-spot fallback via hotkey* — **Cmd+Shift+T** force-translates the entire latest frame to the VLM regardless of Vision output, displays in a centered overlay. Second press dismisses; in-flight cancellation tracked main-side via `forceOverlayShown` flag so a mid-fetch dismiss drops the eventual result on the floor.
+2. [ ] *"Translate now" hotkey for hover bypass* — different from above; this would bypass the 250 ms dwell on already-hovered text. Lower priority now that Cmd+Shift+T covers the main pain point.
+3. [ ] *Shift stationary-hover edge case.* Mousemove samples `e.shiftKey`; pressing Shift after entering a zone without any motion doesn't toggle the popup until pointer nudges. Plausible workaround: global hotkey to "lock" shift state.
+4. [ ] *32B vs 72B variant default* — config knob (env or settings.json), 72B as default.
+5. [ ] *Mining (Ship 3)* unblocked — payload pieces are now in the main-side latch.
 
 ### Ship 3 — Sentence mining
 

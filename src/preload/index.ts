@@ -59,7 +59,8 @@ import {
   type HoverHotkey,
   type HoverZonePayload,
   type RegionTranslationPayload,
-  type TranslateRegionRequest
+  type TranslateRegionRequest,
+  type ForceTranslationEvent
 } from '@shared/ipc'
 
 const vnr = {
@@ -142,6 +143,13 @@ const vnr = {
     ipcRenderer.on(Channels.regionTranslation, listener)
     return () => {
       ipcRenderer.removeListener(Channels.regionTranslation, listener)
+    }
+  },
+  onForceTranslation: (cb: (event: ForceTranslationEvent) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, event: ForceTranslationEvent): void => cb(event)
+    ipcRenderer.on(Channels.forceTranslation, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.forceTranslation, listener)
     }
   }
 }
