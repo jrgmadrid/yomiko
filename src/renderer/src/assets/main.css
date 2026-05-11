@@ -35,5 +35,5 @@ body,
     rgba(255, 255, 255, 0.04) 100%
   );
   background-size: 200% 100%;
-  animation: vnr-shimmer 1.4s ease-in-out infinite;
+  animation: vnr-shimmer 2.2s ease-in-out infinite;
 }

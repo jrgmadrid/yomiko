@@ -186,10 +186,11 @@ function App(): React.JSX.Element {
             if (!currentLine || !JAPANESE_REGEX.test(currentLine.text)) return null
             const matched =
               translation && translation.source === currentLine.text ? translation : null
-            // JP→EN char ratio averages ~1.5–2x; bar width approximates the
-            // expected English render length so the placeholder doesn't feel
-            // disproportionate to short or long sources. Clamped at both ends.
-            const skeletonPx = Math.min(560, Math.max(96, currentLine.text.length * 14))
+            // EN translation char count ≈ 1.5× source JP, but EN glyphs render
+            // ~half as wide as JP, so total bar width tracks ~10px per source
+            // char rather than naively scaling by the char-count ratio.
+            // Clamped to keep short lines visible and long lines bounded.
+            const skeletonPx = Math.min(480, Math.max(80, currentLine.text.length * 10))
             return (
               <div className="shrink-0 border-t border-white/10 pt-2 text-sm leading-relaxed">
                 {matched ? (
