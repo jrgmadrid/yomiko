@@ -9,11 +9,13 @@ import { app } from 'electron'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { DeepLTranslator } from './deepl'
+import { DeepSeekTranslator } from './deepseek'
 import { TranslateError, type Translator, type TranslateResult } from './types'
 
 const MAX_CACHE_ENTRIES = 1000
 
 interface SettingsShape {
+  deepSeekApiKey?: string
   deepLApiKey?: string
 }
 
@@ -22,31 +24,52 @@ let initFailed = false
 
 const cache = new Map<string, TranslateResult>()
 
-function readApiKey(): string | null {
-  const fromEnv = process.env.DEEPL_API_KEY?.trim()
-  if (fromEnv) return fromEnv
+interface BackendChoice {
+  build: (key: string) => Translator
+  key: string
+  label: string
+}
+
+// Precedence: DeepSeek first (cheap, sustained-use friendly, no quota
+// cliff), DeepL second (BYOK option for users with a Pro key from other
+// contexts). Whichever key is present wins; both unset = translation
+// disabled.
+function pickBackend(): BackendChoice | null {
+  const settings = readSettings()
+  const dsKey = (process.env.DEEPSEEK_API_KEY ?? settings.deepSeekApiKey ?? '').trim()
+  if (dsKey) {
+    return { build: (k) => new DeepSeekTranslator(k), key: dsKey, label: 'DeepSeek' }
+  }
+  const dlKey = (process.env.DEEPL_API_KEY ?? settings.deepLApiKey ?? '').trim()
+  if (dlKey) {
+    return { build: (k) => new DeepLTranslator(k), key: dlKey, label: 'DeepL' }
+  }
+  return null
+}
+
+function readSettings(): SettingsShape {
   try {
     const path = resolve(app.getPath('userData'), 'settings.json')
-    const raw = readFileSync(path, 'utf8')
-    const settings = JSON.parse(raw) as SettingsShape
-    return settings.deepLApiKey?.trim() ?? null
+    return JSON.parse(readFileSync(path, 'utf8')) as SettingsShape
   } catch {
-    return null
+    return {}
   }
 }
 
 function getTranslator(): Translator | null {
   if (translator) return translator
   if (initFailed) return null
-  const key = readApiKey()
-  if (!key) {
-    console.warn('[translate] no DeepL API key (set DEEPL_API_KEY or userData/settings.json deepLApiKey); translation disabled')
+  const choice = pickBackend()
+  if (!choice) {
+    console.warn(
+      '[translate] no API key (set DEEPSEEK_API_KEY, DEEPL_API_KEY, or the equivalents in userData/settings.json); translation disabled'
+    )
     initFailed = true
     return null
   }
   try {
-    translator = new DeepLTranslator(key)
-    console.log('[translate] DeepL backend ready')
+    translator = choice.build(choice.key)
+    console.log(`[translate] ${choice.label} backend ready`)
     return translator
   } catch (err) {
     console.error('[translate] backend init failed:', (err as Error).message)
