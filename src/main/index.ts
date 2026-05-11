@@ -44,11 +44,34 @@ let ocrSource: OCRSource | null = null
 // (Textractor/manual-paste via bindSource, Test VN poll, devOcrTest) go
 // through here. Translation is fire-and-forget; failure or no-key disables
 // it silently and the source line still ships immediately.
+//
+// `text` is what the renderer displays (full OCR result). The translation
+// candidate is text with non-JP lines stripped, so when OCR pulls in chrome
+// like "[game scene]" alongside the actual VN line, we don't pay DeepSeek
+// to translate the chrome (and the user doesn't see a translation that
+// mostly repeats English they can already read).
+//
+// Hiragana, katakana, CJK ideographs (incl. extension A and compat) — same
+// predicate as ocr/hover-zones.ts hasJapanese, kept inline so the import
+// graph stays clean.
+const JAPANESE_REGEX = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
+
 function emitTextLine(text: string): void {
   if (!overlay || overlay.isDestroyed()) return
   overlay.webContents.send(Channels.textLine, text)
-  void translateLine(text).then((result) => {
+
+  const translatable = text
+    .split('\n')
+    .filter((line) => JAPANESE_REGEX.test(line))
+    .join('\n')
+    .trim()
+  if (!translatable) return
+
+  void translateLine(translatable).then((result) => {
     if (!result || !overlay || overlay.isDestroyed()) return
+    // `source` echoes the displayed text so the renderer can match the
+    // translation to the displayed line; the translatable subset is an
+    // implementation detail of what we sent upstream.
     const payload: TranslationPayload = {
       source: text,
       text: result.text,

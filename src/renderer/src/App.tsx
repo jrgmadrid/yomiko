@@ -23,6 +23,11 @@ interface RenderedLine {
 const HISTORY_LIMIT = 1
 let nextLineId = 1
 
+// Mirrors src/main/index.ts JAPANESE_REGEX. Inline here so the renderer can
+// decide whether to expect a translation (and render a loading state) without
+// piping per-line metadata through the IPC.
+const JAPANESE_REGEX = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
+
 function App(): React.JSX.Element {
   const [lines, setLines] = useState<RenderedLine[]>([])
   const [status, setStatus] = useState<SourceStatus>('disconnected')
@@ -176,11 +181,21 @@ function App(): React.JSX.Element {
               )}
             </div>
           )}
-          {translation && translation.source === lines[lines.length - 1]?.text && (
-            <div className="shrink-0 border-t border-white/10 pt-2 text-sm leading-relaxed text-white/60">
-              {translation.text}
-            </div>
-          )}
+          {(() => {
+            const currentLine = lines[lines.length - 1]
+            if (!currentLine || !JAPANESE_REGEX.test(currentLine.text)) return null
+            const matched =
+              translation && translation.source === currentLine.text ? translation : null
+            return (
+              <div className="shrink-0 border-t border-white/10 pt-2 text-sm leading-relaxed">
+                {matched ? (
+                  <span className="text-white/60">{matched.text}</span>
+                ) : (
+                  <span className="italic text-white/30">translating…</span>
+                )}
+              </div>
+            )
+          })()}
         </div>
         {lookup && hoveredAnchor && <Popup data={lookup} anchor={hoveredAnchor} />}
       </div>
