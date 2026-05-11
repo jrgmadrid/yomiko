@@ -10,3 +10,6 @@ resources/lindera/
 resources/bin/
 .cache/
 .wrangler/
+.env
+.env.local
+.dev.vars
