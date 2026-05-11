@@ -16,11 +16,15 @@ body,
   color: rgba(255, 255, 255, 0.92);
 }
 
-/* Translation-strip skeleton: shimmer gradient sliding across a dim bar
-   while DeepSeek round-trips. Width set inline per source-line length. */
+/* Translation-strip skeleton: a narrow shimmer band sweeps across a dim
+   base bar while DeepSeek round-trips. Base color shows through at both
+   loop boundaries, so the restart is visually identical to mid-animation
+   "shimmer is off-screen" and the loop is seamless. Linear timing
+   because ease-in-out + a moving gradient creates slow-fast-slow rhythm
+   that doesn't read as a real shimmer. */
 @keyframes vnr-shimmer {
   0% {
-    background-position: -150% 0;
+    background-position: -50% 0;
   }
   100% {
     background-position: 150% 0;
@@ -28,12 +32,14 @@ body,
 }
 
 .vnr-shimmer {
-  background: linear-gradient(
+  background-color: rgba(255, 255, 255, 0.04);
+  background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.16) 50%,
-    rgba(255, 255, 255, 0.04) 100%
+    transparent 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 100%
   );
-  background-size: 200% 100%;
-  animation: vnr-shimmer 2.2s ease-in-out infinite;
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  animation: vnr-shimmer 2.2s linear infinite;
 }
