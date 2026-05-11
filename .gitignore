@@ -9,3 +9,4 @@ resources/dict/*.db-*
 resources/lindera/
 resources/bin/
 .cache/
+.wrangler/
