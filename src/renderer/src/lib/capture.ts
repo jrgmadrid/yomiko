@@ -49,8 +49,14 @@ export async function startCapture(): Promise<CaptureHandle> {
   document.body.appendChild(video)
   await video.play()
 
+  // willReadFrequently: true keeps these canvases CPU-backed. The default
+  // (GPU-backed) path triggers Skia "non-existent mailbox" errors on the
+  // rotated canvas-to-canvas drawImage in vertical mode — the GPU shared
+  // image gets released between operations, the rotation silently produces
+  // a blank canvas, and OCR ends up running against either nothing or the
+  // unrotated chrome. CPU-backed avoids the entire mailbox lifecycle.
   const canvas = document.createElement('canvas')
-  const rawCtx = canvas.getContext('2d', { willReadFrequently: false })
+  const rawCtx = canvas.getContext('2d', { willReadFrequently: true })
   if (!rawCtx) throw new Error('canvas 2d context unavailable')
   const ctx: CanvasRenderingContext2D = rawCtx
 
@@ -88,7 +94,7 @@ export async function startCapture(): Promise<CaptureHandle> {
         const cropCanvas = document.createElement('canvas')
         cropCanvas.width = region.w
         cropCanvas.height = region.h
-        const cropCtx = cropCanvas.getContext('2d')
+        const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true })
         if (cropCtx) {
           cropCtx.drawImage(
             canvas,
@@ -112,7 +118,7 @@ export async function startCapture(): Promise<CaptureHandle> {
             const rotated = document.createElement('canvas')
             rotated.width = cropCanvas.height
             rotated.height = cropCanvas.width
-            const rotCtx = rotated.getContext('2d')
+            const rotCtx = rotated.getContext('2d', { willReadFrequently: true })
             if (rotCtx) {
               rotCtx.translate(0, rotated.height)
               rotCtx.rotate(-Math.PI / 2)
