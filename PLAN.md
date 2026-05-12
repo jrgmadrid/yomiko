@@ -304,13 +304,14 @@ The real-VN dogfood that gated Ship 2.5 finally ran (Ren'Py JP title, free itch.
 
 ### Ship 3 — Sentence mining
 
-(Unchanged — Anki integration always belonged after the source layer is solid.)
+Most of the work is already done by Ship 2.8 — the `latestFrame` latch in main carries the cropped PNG, the hover-zone payload carries the line text and the hovered token, and the VLM-driven dictionary path means the mined sentence/word can use the corrected transcription rather than Vision's first-pass. The remaining work is wiring those into an AnkiConnect call behind a hotkey.
 
-- [ ] AnkiConnect v6 client in main process
-- [ ] One-hotkey card creation: current sentence + hovered word + screenshot of the captured window region
-- [ ] Audio capture from VN window (CoreAudio tap on Mac, WASAPI loopback on Win — both painful, may push to Ship 3.5)
-- [ ] Card template config (deck, model, field mapping)
-- [ ] First-run AnkiConnect permission flow
+- [ ] AnkiConnect v6 client in main process (HTTP to `127.0.0.1:8765`)
+- [ ] One-hotkey card creation: current sentence + hovered word + screenshot of the captured line region. Sentence + word from hover state; screenshot from `cropAroundLine(latestFrame.png, line.rect)` (same op as force-translate, different downstream).
+- [ ] Card template config (deck, model, field mapping) — settings.json or env, not a UI yet.
+- [ ] First-run AnkiConnect permission flow — detect AnkiConnect running, prompt for permission grant in Anki, surface error states clearly.
+
+**Audio capture: explicit non-goal** (decided 2026-05-11). Cross-platform native audio capture (CoreAudio tap on Mac, WASAPI loopback on Win) is genuinely painful and the lowest-marginal-value piece for a reader-focused workflow — text mining alone is the dominant pattern in mature mining communities, and VN scenes are easy to revisit if you want the audio later. Dropping audio simplifies Ship 3 from "research spike + cross-platform native code" to "wire existing pieces into an HTTP call." If a future user really wants audio, GSM-style file-watching against an OBS recording is the documented escape hatch.
 
 ### Ship 4 — Daily-use polish (was Ship 2) + Textractor as power-user mode
 
@@ -336,7 +337,6 @@ The real-VN dogfood that gated Ship 2.5 finally ran (Ren'Py JP title, free itch.
 ## Open questions / deferred
 
 - **Real-VN ScreenCaptureKit behavior** (Ship 2.5 closeout). Need a real VN session to confirm the SCK-throttling-when-idle pathology doesn't bite real animated VNs. If it does, the next layer is a Swift sidecar talking to `SCStream` directly. See "Dogfood notes" above.
-- **Audio capture for Ship 3** is genuinely hard cross-platform; may need a separate research spike before Ship 3 starts. Worst case: defer to "user records via OBS, GSM-style file watching" — but that loses the all-in-one promise.
 - **Dictionary distribution**: bundled vs. downloaded on first run. Lean toward downloaded (~12MB gzipped JMdict) so installer stays slim; Ship 5 question.
 - **Multi-game profile support**: per-game settings (region for OCR, dict overrides, mining deck). Region persistence is in for Ship 2; the rest waits for Ship 4 settings UI.
 - **Color/theme**: not yet designed. Default to dark, glassy, low-contrast against game; expose CSS injection for users who want to restyle.
