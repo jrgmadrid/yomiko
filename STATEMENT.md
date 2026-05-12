@@ -8,9 +8,9 @@ the use of AI in consumer products has social and political consequences, partic
 
 i think of art as a *social practice*: the common heritage of human culture and history. not a mode of cultural consumption; not a selection of consumable goods ranked along some spectrum of cultural importance; it's something that circulates between makers, audiences, traditions. and it's the move of capital to wedge itself into those circulations and gate them, enclosing both the production of art and its passage to the audiences who would receive it.
 
-yomiko exists in opposition to the arrangement under which private interests dictate which cultural products are *worthy* of consumption based on expected return, and thereby dictate what audiences can exist at all. yomiko isn't trying to further expropriate the creative and cognitive labor of the artists who brought these works into existence, nor that of the translators and localizers whose work is the reason any of this medium has crossed language at all. the opposition is to the gating apparatus, not to the labor inside it.
+c/o sakai's *translation and subjectivity*: translation produces the separation it claims to bridge. the bifurcation between "japanese content" and "english-speaking audiences" is itself a byproduct of the translation regime, not its precondition. the categories don't pre-exist their bridging, and the localization industry constitutes the cultural separation it claims to gatekeep.
 
-yomiko knowingly inhabits a contradiction: using a tool built on one form of enclosure to resist another.
+yomiko exists in opposition to the arrangement under which private interests dictate which cultural products are *worthy* of consumption based on expected return, and thereby dictate what audiences can exist at all. yomiko isn't trying to further expropriate the creative and cognitive labor of the artists who brought these works into existence, nor that of the translators and localizers whose work is the reason any of this medium has crossed language at all. the opposition is to the gating apparatus, not to the labor inside it.
 
 ## the data path
 
@@ -20,11 +20,13 @@ if the concern is "is my screenshot going into someone's training set tomorrow,"
 
 ## what the model already is
 
-training data going forward is the easy concern. the harder one is what the model itself already *is*. pasquinelli puts it directly in *eye of the master*: the corpus is the labour. qwen and language models like it were trained on a corpus that includes art and writing scraped without contributor consent. the model isn't a separate thing that *uses* that work as raw material; the model **is** that work, statistically compressed and re-served as an API. when you ⌘⇧T a vertical mantra panel and get back "On Marishi-ten Sowaka—", that production is borrowed labor. buddhist translation traditions, sanskrit-japanese lexicographers, the specific human who wrote the reference qwen scraped that romanization out of, fast-forwarded into one API call and billed at a fraction of a cent.
+training data going forward is the easy concern. the harder one is what the model itself already *is*. 
+
+pasquinelli puts it directly in *the eye of the master*: the corpus is the labour. qwen and language models like it were trained on a corpus that includes art and writing scraped without contributor consent. the model isn't a separate thing that *uses* that work as raw material; the model **is** that work, statistically compressed and re-served as an API. when you ⌘⇧T a vertical mantra panel and get back "On Marishi-ten Sowaka—", that production is borrowed labor. buddhist translation traditions, sanskrit-japanese lexicographers, the specific human who wrote the reference qwen scraped that romanization out of, fast-forwarded into one API call and billed at a fraction of a cent.
 
 "we don't contribute back to training" is a partial answer. it addresses marginal labor going forward; it doesn't address the base model. the base model is the expropriation. using it perpetuates and capitalizes the loop, no matter how clean the API hygiene downstream.
 
-the same critique applies to neural machine translation, often more directly. deepl traces back to linguee's bilingual web scrape, much of which is professional translator output that no one asked about. google translate: same shape, different corpora. there is no "ethical neural MT" you can swap in to dissolve the critique. the question is the underlying mode of accumulation, not which model has the cleanest hands.
+the same critique applies to neural machine translation, often more directly. deepl traces back to linguee's bilingual web scrape, much of which is professional translator output that no one asked about. google translate: same shape, different corpora. there is no "ethical neural machine TL" you can swap in to dissolve the critique. the question is the underlying mode of accumulation, not which model has the cleanest hands.
 
 ## commons and enclosure
 
@@ -56,6 +58,12 @@ these alternatives exist because some users will weigh the contradictions differ
 
 yomiko exists because tools like qwen2.5-VL exist. the project's whole reason for being is that VLMs solved problems (rare-kanji recognition, vertical text, stylized fonts) that constrained-vocab OCR hadn't. building this at all is a vote of confidence in the ecosystem's outputs being useful enough to use. routing carefully and offering opt-outs doesn't put the project outside the critique.
 
-what yomiko is built against is one form of enclosure: corporate gatekeeping of which works cross language, and therefore which audiences exist. what yomiko is built on is another form: the corpus of an enclosure-derived model. i won't pretend either is neutral, and i won't pretend the second cancels the first.
+what yomiko is built against is one form of enclosure: corporate gatekeeping of which works cross language, and therefore which audiences exist. what yomiko is built on is another form: the corpus of an enclosure-derived model. i won't pretend that either form is politically neutral, nor that one cancels out the other.
 
-if you read this and decide yomiko isn't for you, i respect it. if you read this and use the VLM path with eyes open, i respect that, too. dict-only and textractor aren't escape valves from the contradictions; they're different arrangements of them, and the only dishonest position is pretending the contradictions don't exist.
+regardless of whether you read this and decide yomiko isn't for you, or whether you read this and use the VLM path with eyes open, i will stress that dict-only and textractor aren't escape valves from the contradictions but different arrangements of them. the only dishonest position is pretending the contradictions don't exist.
+
+## who this is for
+
+yomiko is for people who can't afford access across the bifurcation to study japanese in earnest. it gives them some tooling to bridge that gap, however small. but really, at its core, i built it because i remembered how awful the tooling was when i tried to read SubaHibi at fifteen. since then i went and studied japanese, and i can work through looking-glass insects now without a text hooker — but yomiko is for the people who lacked the privilege to do that.
+
+downplaying the inherent politics of this project by citing flight of fancy is itself a political move.
