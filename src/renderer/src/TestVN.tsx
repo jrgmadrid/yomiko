@@ -5,6 +5,11 @@ import { useEffect, useState } from 'react'
 // stress case: two pairs of bias-prone kanji (信×2, 言×2) — four
 // refinement candidates per OCR fire. If Vision misreads any combination
 // of them, the repeated-kanji heuristic should resolve every position.
+// Line 10 is the Ship 2.6 / Ship 2.8 stress case: Marishiten mantra
+// containing 唵, which no constrained-vocab JP OCR (Apple Vision,
+// manga-OCR, EasyOCR, PaddleOCR) can produce. Tests that ⌘⇧T force-
+// translate routes through the VLM and that Qwen's byte-level tokens
+// recover the char Vision can't see.
 const LINES = [
   'こんにちは、私はテストです。',
   '今日はとても暑い日ですね。',
@@ -14,7 +19,8 @@ const LINES = [
   '魔法少女たちは、世界を救うために戦った。',
   '何度言われても、信じられなかった。',
   '猫が窓辺で眠っている。',
-  '信じる言葉、言える信頼。'
+  '信じる言葉、言える信頼。',
+  '唵・摩利支曳・娑婆訶——'
 ]
 
 export default function TestVN(): React.JSX.Element {

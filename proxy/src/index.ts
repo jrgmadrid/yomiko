@@ -35,26 +35,36 @@ const TRANSLATE_SYSTEM_PROMPT =
   'Translate the user message to natural, idiomatic English that preserves tone and register. ' +
   'Output only the translation. No quotes, no commentary, no romanization, no notes.'
 
-// Vision prompt: the image carries one block of Japanese text from a VN
-// screen. Surrounding chrome (window titles, menu items) may sit inside the
-// crop; the model should ignore those and focus on the longest contiguous
-// Japanese sentence.
+// Vision prompt: transcribe-faithfully, then translate. Each clause defends
+// against a specific empirical failure: common-kanji substitution (唵 → 俺),
+// canonical-form normalization (摩利支曳 → 摩利支天), trailing-mark omission
+// (ー dropped), vertical-bracket misread (」 → こ), mantra mistranslation
+// (Sanskrit form when Japanese-reading is what's spoken in-scene).
 const VISION_SYSTEM_PROMPT =
-  'You are a professional Japanese-to-English translator working on visual novel dialogue. ' +
-  'You will be shown a cropped screenshot containing Japanese text. ' +
-  'Identify the longest contiguous Japanese sentence, transcribe it exactly as written ' +
-  '(including wrapped lines as a single sentence), then translate it into natural, idiomatic English ' +
-  'that preserves tone and register. ' +
-  'Ignore window chrome, menu buttons, UI labels, and partial sentences from adjacent regions. ' +
-  'Respond with a single JSON object on one line: ' +
-  '{"text":"<japanese>","translation":"<english>"}. ' +
+  'You are a professional Japanese-to-English translator for visual novel dialogue. ' +
+  'Given an image, identify the longest contiguous Japanese sentence or text panel, ' +
+  'transcribe it character-faithfully, then translate it. ' +
+  'Transcription: do not substitute visually-similar common kanji for rare ones; ' +
+  'do not normalize archaic, liturgical, or unusual spellings to canonical forms. ' +
+  'Use furigana annotations to confirm kanji identity (furigana "おん" indicates 唵, not 俺). ' +
+  'Preserve all visible punctuation including trailing marks (ー、…、——、？、！). ' +
+  'Japanese corner brackets (「」『』) rotate in vertical text and resemble hiragana ' +
+  '(」 ≈ こ, 「 ≈ し); identify them by their structural role at sentence boundaries. ' +
+  'Render genuinely unreadable characters as "？" rather than guessing. ' +
+  'Translation: natural, idiomatic English preserving tone and register. ' +
+  'For Buddhist mantras or liturgical text chanted by a Japanese character, use the ' +
+  'Japanese-reading romanization (e.g., "On Marishi-ten Sowaka—", not "Om Marichi Svaha") — ' +
+  'the JP reading is what is sonically performed. Hyphenate compound deity names. ' +
+  'Ignore window chrome, menu buttons, and UI labels. ' +
+  'Respond with one JSON object: {"text":"<japanese>","translation":"<english>"}. ' +
   'No markdown, no code fences, no commentary.'
 
 const VISION_USER_PROMPT = 'Transcribe and translate the Japanese text in this image.'
 
-// ~4MB base64 ≈ 3MB raw PNG. A single dialogue-line crop is typically <100KB;
-// this ceiling is a generous abuse-guard, not a typical case.
-const MAX_IMAGE_B64_LEN = 4 * 1024 * 1024
+// ~8MB base64 ≈ 6MB raw PNG. Clients are expected to downscale full-frame
+// captures to ~1600px max dim before sending, which lands well under this;
+// the ceiling is an abuse guard, not a typical case.
+const MAX_IMAGE_B64_LEN = 8 * 1024 * 1024
 
 interface TranslateRequest {
   text?: unknown

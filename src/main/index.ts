@@ -16,7 +16,7 @@ import { groupTokens } from './tokenize/grouping'
 import type { FrameOcrData } from './sources/types'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
 import { lookupGroup } from './dict/deinflect'
-import { translateRegionImage } from './translate/vlm'
+import { translateRegionImage, persistCache } from './translate/vlm'
 import { listWindows } from './capture/picker'
 import {
   configureDisplayMediaHandler,
@@ -561,6 +561,7 @@ app.on('will-quit', () => {
 app.on('before-quit', async () => {
   await Promise.all(sources.map((s) => s.stop()))
   await windowInfoBackend?.close()
+  persistCache()
   jmdictClose()
 })
 

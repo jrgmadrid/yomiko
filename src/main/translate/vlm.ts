@@ -16,11 +16,23 @@
 // IPC handler in main/index.ts checks for null and silently skips sending
 // any payload back to the overlay.
 
-import { app } from 'electron'
-import { readFileSync } from 'node:fs'
+import { app, nativeImage } from 'electron'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const MAX_CACHE_ENTRIES = 200
+// Cap for the longest side. Below ~2k, Qwen still benefits from extra
+// resolution on small text (furigana annotations, sidebar panels in
+// busy scenes) — losing that detail demonstrably hurts rare-kanji
+// transcription. Above this, the model downscales internally anyway, so
+// pushing higher just wastes bandwidth and input tokens. The proxy's 8MB
+// b64 cap (≈6MB raw PNG) is the floor this has to fit under for retina
+// 2560×1440 captures: 2048×1152 PNG hovers around 1-3MB.
+const MAX_IMAGE_DIM = 2048
+// Bump when the cache file's schema or value shape changes — older files
+// with mismatched version are ignored on load, so stale entries from a
+// prior code shape can't bleed into the running session.
+const CACHE_FORMAT_VERSION = 1
 
 export interface VlmResult {
   text: string
@@ -44,8 +56,57 @@ interface VisionResponse {
 }
 
 const cache = new Map<string, VlmResult>()
+let cacheLoaded = false
 // undefined = not yet read, null = absent / disabled, otherwise live creds.
 let creds: ProxyCreds | null | undefined = undefined
+
+interface CacheFile {
+  version: number
+  entries: [string, VlmResult][]
+}
+
+function cachePath(): string {
+  return resolve(app.getPath('userData'), 'vlm-cache.json')
+}
+
+// Lazy load on first call. Survives `npm run dev` restarts so VN scenes
+// you revisit don't re-hit the VLM. Insertion order is preserved (the LRU
+// hand-rolled atop Map relies on it), so cache recency carries across
+// sessions too.
+function loadCacheOnce(): void {
+  if (cacheLoaded) return
+  cacheLoaded = true
+  try {
+    const text = readFileSync(cachePath(), 'utf8')
+    const parsed = JSON.parse(text) as CacheFile
+    if (parsed.version !== CACHE_FORMAT_VERSION) {
+      console.log(
+        `[vlm] cache format v${parsed.version}, expected v${CACHE_FORMAT_VERSION}; starting fresh`
+      )
+      return
+    }
+    for (const [k, v] of parsed.entries.slice(-MAX_CACHE_ENTRIES)) {
+      cache.set(k, v)
+    }
+    console.log(`[vlm] loaded ${cache.size} cached translations from disk`)
+  } catch {
+    // No cache file or unreadable — fine, starting empty.
+  }
+}
+
+export function persistCache(): void {
+  if (!cacheLoaded) return // never loaded, so nothing meaningful to write
+  try {
+    const payload: CacheFile = {
+      version: CACHE_FORMAT_VERSION,
+      entries: [...cache.entries()]
+    }
+    writeFileSync(cachePath(), JSON.stringify(payload))
+    console.log(`[vlm] persisted ${payload.entries.length} translations to disk`)
+  } catch (err) {
+    console.warn(`[vlm] cache persist failed: ${(err as Error).message}`)
+  }
+}
 
 function readCreds(): ProxyCreds | null {
   if (creds !== undefined) return creds
@@ -100,13 +161,15 @@ export async function translateRegionImage(
   const c = readCreds()
   if (!c) return null
 
+  loadCacheOnce()
   const cached = recordHit(cacheKey)
   if (cached) {
     console.log(`[vlm] cache hit: ${cacheKey.slice(0, 60)}`)
     return cached
   }
 
-  const imageB64 = png.toString('base64')
+  const sized = downscaleIfLarge(png)
+  const imageB64 = sized.toString('base64')
 
   let res: Response
   try {
@@ -144,4 +207,17 @@ export async function translateRegionImage(
   const result: VlmResult = { text: data.text, translation: data.translation }
   recordMiss(cacheKey, result)
   return result
+}
+
+function downscaleIfLarge(png: Buffer): Buffer {
+  const img = nativeImage.createFromBuffer(png)
+  const { width, height } = img.getSize()
+  const longest = Math.max(width, height)
+  if (longest <= MAX_IMAGE_DIM) return png
+  const scale = MAX_IMAGE_DIM / longest
+  const w = Math.round(width * scale)
+  const h = Math.round(height * scale)
+  const resized = img.resize({ width: w, height: h, quality: 'good' })
+  console.log(`[vlm] downscaled ${width}×${height} → ${w}×${h}`)
+  return resized.toPNG()
 }
