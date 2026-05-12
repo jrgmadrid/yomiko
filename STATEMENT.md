@@ -14,7 +14,7 @@ yomiko exists in opposition to the arrangement under which private interests dic
 
 ## the data path
 
-yomiko's translation feature sends a captured image — either a per-line crop on hover or the full frame on `⌘⇧T` — to qwen2.5-VL, a vision-language model hosted on OpenRouter and reached through a Cloudflare Worker proxy in this repo. the Worker forwards without logging. OpenRouter's stated policy is no-training on API traffic. underlying providers vary. i can't guarantee any of that on your behalf; bytes pass through services with their own retention practices.
+yomiko's translation feature sends a captured image — either a per-line crop on hover or the full frame on `⌘⇧T` — to qwen2.5-VL, a vision-language model hosted on openrouter and reached through a cloudflare worker proxy in this repo. the worker forwards without logging. openrouter's stated policy is no-training on API traffic. underlying providers vary. i can't guarantee any of that on your behalf; bytes pass through services with their own retention practices.
 
 if the concern is "is my screenshot going into someone's training set tomorrow," the answer is probably not. i can't promise on behalf of every service in the chain.
 
