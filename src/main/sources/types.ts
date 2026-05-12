@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import type { OcrResult } from '../ocr/types'
-import type { Orientation, SharedRegion } from '@shared/ipc'
+import type { SharedRegion } from '@shared/ipc'
 
 export type SourceStatus = 'connected' | 'reconnecting' | 'disconnected'
 
@@ -10,10 +10,6 @@ export interface FrameOcrData {
   /** Source PNG fed to the OCR backend. Held by the main process so it can
    *  re-crop around a hovered line for VLM translation without re-capturing. */
   png: Buffer
-  /** Renderer's pre-OCR orientation hint. 'vertical' means the renderer
-   *  pre-rotated the PNG 90° CCW; main must un-rotate bboxes before
-   *  building hover zones for the actual on-screen text. */
-  orientation: Orientation
 }
 
 export type TextSourceEvents = {

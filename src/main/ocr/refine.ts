@@ -90,9 +90,5 @@ export async function refineResult(
       line.chars[idx] = { text: replacement, rect: charBox.rect }
     }
   }
-  return {
-    lines: work.map((w) => w.line),
-    imageWidth: result.imageWidth,
-    imageHeight: result.imageHeight
-  }
+  return { lines: work.map((w) => w.line) }
 }

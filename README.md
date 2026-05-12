@@ -55,7 +55,6 @@ For development without a real VN: `window.vnr.openTestVN()` in DevTools opens a
 | Hover a word | Translation overlay for the line |
 | Shift + hover | Add the JMdict popup for the hovered word |
 | `⌘⇧T` | Force-translate the entire frame (use when OCR sees nothing) |
-| `⌘⇧J` | Toggle tategaki (vertical text) mode — pre-rotates capture so Vision can read it |
 | `⌘⇧H` | Toggle hover mode |
 | `⌘⇧D` | Toggle debug rects (per-char OCR bboxes) |
 

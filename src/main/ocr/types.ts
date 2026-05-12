@@ -27,13 +27,6 @@ export interface OcrLine {
 
 export interface OcrResult {
   lines: OcrLine[]
-  /** Pixel dimensions of the image that produced this result. Needed for
-   *  un-rotating bboxes when the renderer pre-rotated the input for
-   *  vertical Japanese — rotImgH = orig_W, so bbox-back math requires
-   *  knowing the rotated-image dimensions. Zero on backends that don't
-   *  populate it (Win OCR sidecar pre-bbox extension). */
-  imageWidth: number
-  imageHeight: number
 }
 
 export interface OcrBackend {
