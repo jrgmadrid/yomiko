@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "author": "Jacob Madrid",
-  "description": "Cloudflare Worker that forwards translation requests from the yomiko app to DeepSeek using the maintainer's API key.",
+  "description": "Cloudflare Worker proxying VLM translation (OpenRouter / Qwen2.5-VL) for the yomiko app, keeping the maintainer's API keys server-side. Legacy DeepSeek text-translation route remains for backward compatibility.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

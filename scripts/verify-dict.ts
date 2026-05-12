@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
-const db = new Database('/Users/dev/Documents/Projects/yomiko/resources/dict/jmdict.db', { readonly: true })
+import { resolve } from 'node:path'
+const db = new Database(resolve(__dirname, '../resources/dict/jmdict.db'), { readonly: true })
 const stmt = db.prepare(`
   SELECT e.id, e.kanji, e.kana, e.senses
   FROM forms f
