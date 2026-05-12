@@ -27,7 +27,6 @@ import {
 import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
-  ForceTranslationEvent,
   RegionTranslationPayload,
   SharedJmdictEntry,
   SharedJmdictSense,
@@ -268,17 +267,15 @@ async function handleTranslateRegion(req: TranslateRegionRequest): Promise<void>
 // scenes, calligraphic title cards where Vision returns zero lines and the
 // per-hover VLM path stays dormant because there's nothing to hover.
 // Toggling: a second press dismisses; a press during an in-flight fetch
-// cancels by dropping the eventual result.
-let forceOverlayShown = false
-
-function sendForce(event: ForceTranslationEvent): void {
-  overlay?.webContents.send(Channels.forceTranslation, event)
-}
+// cancels by dropping the eventual result. The flag is main-side because
+// the hotkey arrives main-side and the cancel decision has to be too —
+// the renderer can't drop a result main is about to dispatch.
+let forceTranslateActive = false
 
 async function handleForceTranslate(): Promise<void> {
-  if (forceOverlayShown) {
-    forceOverlayShown = false
-    sendForce({ kind: 'dismiss' })
+  if (forceTranslateActive) {
+    forceTranslateActive = false
+    overlay?.webContents.send(Channels.forceTranslation, { kind: 'dismiss' })
     return
   }
   const frame = latestFrame
@@ -286,8 +283,8 @@ async function handleForceTranslate(): Promise<void> {
     console.warn('[force-translate] no frame in latch yet')
     return
   }
-  forceOverlayShown = true
-  sendForce({ kind: 'start' })
+  forceTranslateActive = true
+  overlay?.webContents.send(Channels.forceTranslation, { kind: 'start' })
   const visionText = ocrResultToText(frame.result).trim()
   // When Vision found something, key by that for cross-frame dedupe.
   // When Vision found nothing (the named failure case this hotkey exists
@@ -295,13 +292,17 @@ async function handleForceTranslate(): Promise<void> {
   // covers "user pressed the hotkey twice in a row by accident."
   const cacheKey = `force:${visionText || `frame:${frame.frameId}`}`
   const result = await translateRegionImage(frame.png, cacheKey)
-  if (!forceOverlayShown) return // user dismissed mid-fetch
+  if (!forceTranslateActive) return // user dismissed mid-fetch
   if (!result) {
-    forceOverlayShown = false
-    sendForce({ kind: 'dismiss' })
+    forceTranslateActive = false
+    overlay?.webContents.send(Channels.forceTranslation, { kind: 'dismiss' })
     return
   }
-  sendForce({ kind: 'result', text: result.text, translation: result.translation })
+  overlay?.webContents.send(Channels.forceTranslation, {
+    kind: 'result',
+    text: result.text,
+    translation: result.translation
+  })
 }
 
 function startTestVnPoll(region: SharedRegion): void {
