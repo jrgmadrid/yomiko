@@ -196,10 +196,7 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
       {hovered && lineRect && (
         <div
           className="absolute max-w-[640px] min-w-[160px] rounded-lg border border-white/10 bg-black/85 px-3 py-2 text-sm leading-relaxed text-white shadow-2xl backdrop-blur"
-          style={{
-            left: Math.max(8, lineRect.x),
-            top: lineRect.y + lineRect.h + 8
-          }}
+          style={overlayPosition(lineRect)}
         >
           {translationFresh ? (
             <>
@@ -243,9 +240,28 @@ function findGroupSpanning(
   return null
 }
 
+// Translation overlay anchors below the line for horizontal text and to
+// the left of the line for vertical text. Vertical Japanese reads right-
+// to-left, so the user's gaze has just left the line on its left side —
+// putting the overlay to the left keeps it adjacent to the read material
+// instead of pushing it far below an entire tall column.
+function overlayPosition(lineRect: SharedScreenRect): React.CSSProperties {
+  const isVertical = lineRect.h > lineRect.w * 1.5
+  if (isVertical) {
+    return {
+      right: Math.max(8, window.innerWidth - lineRect.x + 8),
+      top: lineRect.y
+    }
+  }
+  return {
+    left: Math.max(8, lineRect.x),
+    top: lineRect.y + lineRect.h + 8
+  }
+}
+
 // Union of all zone rects on a single line. Used to anchor the translation
-// overlay to the line's bottom-left, not to the hovered token (which would
-// jitter as the user moves across tokens).
+// overlay to the line's bbox, not to the hovered token (which would jitter
+// as the user moves across tokens).
 function unionLineRect(zones: HoverZone[], lineIdx: number): SharedScreenRect | null {
   let minX = Infinity
   let minY = Infinity

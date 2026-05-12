@@ -211,19 +211,24 @@ async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
   await emitHoverZonesFor('real-window', data.result, data.region, bounds, data.png)
 }
 
-// Crop the source PNG around a single OCR'd line, with generous vertical
-// padding so the VLM sees wrapped continuations and surrounding context.
-// Total expansion is ~1.5× line height — enough to catch one wrapped line
-// above and one below without dragging in unrelated chrome blocks.
+// Crop the source PNG around a single OCR'd line, with generous padding
+// perpendicular to the writing axis so the VLM sees wrapped continuations.
+// Horizontal text wraps to the line below → vertical pad; vertical text
+// wraps to the column beside → horizontal pad. The orientation flips which
+// axis gets the wrap-pad and which gets the slop-pad.
 function cropAroundLine(png: Buffer, rect: OcrRect): Buffer | null {
   const img = nativeImage.createFromBuffer(png)
   const { width: imgW, height: imgH } = img.getSize()
-  const vPad = Math.round(rect.h * 0.75)
-  const hPad = Math.round(rect.h * 0.2)
-  const x = Math.max(0, Math.floor(rect.x - hPad))
-  const y = Math.max(0, Math.floor(rect.y - vPad))
-  const w = Math.min(imgW - x, Math.ceil(rect.w + hPad * 2))
-  const h = Math.min(imgH - y, Math.ceil(rect.h + vPad * 2))
+  const isVertical = rect.h > rect.w * 1.5
+  const thickness = isVertical ? rect.w : rect.h
+  const wrapPad = Math.round(thickness * 0.75)
+  const slopPad = Math.round(thickness * 0.2)
+  const xPad = isVertical ? wrapPad : slopPad
+  const yPad = isVertical ? slopPad : wrapPad
+  const x = Math.max(0, Math.floor(rect.x - xPad))
+  const y = Math.max(0, Math.floor(rect.y - yPad))
+  const w = Math.min(imgW - x, Math.ceil(rect.w + xPad * 2))
+  const h = Math.min(imgH - y, Math.ceil(rect.h + yPad * 2))
   const cropped = img.crop({ x, y, width: w, height: h })
   return cropped.isEmpty() ? null : cropped.toPNG()
 }

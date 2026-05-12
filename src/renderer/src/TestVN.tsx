@@ -10,6 +10,9 @@ import { useEffect, useState } from 'react'
 // manga-OCR, EasyOCR, PaddleOCR) can produce. Tests that ⌘⇧T force-
 // translate routes through the VLM and that Qwen's byte-level tokens
 // recover the char Vision can't see.
+// Line 11 is rendered with writing-mode: vertical-rl (see VERTICAL_INDICES
+// below) — exercises the orientation-aware crop padding in main and the
+// overlay-anchored-beside-the-line positioning in HoverProtoLayer.
 const LINES = [
   'こんにちは、私はテストです。',
   '今日はとても暑い日ですね。',
@@ -20,8 +23,13 @@ const LINES = [
   '何度言われても、信じられなかった。',
   '猫が窓辺で眠っている。',
   '信じる言葉、言える信頼。',
-  '唵・摩利支曳・娑婆訶——'
+  '唵・摩利支曳・娑婆訶——',
+  '夜の海は、星よりも深い色をしていた。'
 ]
+
+// 0-based indices into LINES that render in vertical writing mode. Pads
+// the textbox layout so vertical text has enough column height to display.
+const VERTICAL_INDICES = new Set<number>([10])
 
 export default function TestVN(): React.JSX.Element {
   const [idx, setIdx] = useState(0)
@@ -97,8 +105,9 @@ export default function TestVN(): React.JSX.Element {
           fontSize: 30,
           lineHeight: 1.55,
           letterSpacing: 1.5,
-          minHeight: 120,
-          border: '1px solid rgba(255, 255, 255, 0.06)'
+          minHeight: VERTICAL_INDICES.has(idx) ? 480 : 120,
+          border: '1px solid rgba(255, 255, 255, 0.06)',
+          writingMode: VERTICAL_INDICES.has(idx) ? 'vertical-rl' : undefined
         }}
       >
         {LINES[idx]}
