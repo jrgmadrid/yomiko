@@ -152,17 +152,23 @@ async function pollTestVnFrame(): Promise<void> {
 //
 // Stashes the (frameId, png, result, region) tuple in latestFrame so the
 // translateRegion IPC handler can crop the PNG by line bbox without
-// re-capturing or re-running OCR.
+// re-capturing or re-running OCR. When orientation is 'vertical', the PNG
+// and result are in rotated coords (renderer pre-rotated CCW); the latch
+// stays in that space so cropAroundLine matches the rotated PNG, but
+// buildHoverZones gets an un-rotated result so screen-coord rects land on
+// the original (vertical) text positions.
 async function emitHoverZonesFor(
   label: 'test-vn' | 'real-window',
   result: OcrResult,
   region: SharedRegion,
   captureOrigin: { x: number; y: number },
-  png: Buffer
+  png: Buffer,
+  orientation: 'horizontal' | 'vertical'
 ): Promise<void> {
   if (!overlay || overlay.isDestroyed()) return
   const frameId = ++frameCounter
   latestFrame = { frameId, png, result, region }
+  const displayResult = orientation === 'vertical' ? unrotateOcrResult(result) : result
   const overlayBounds = overlay.getContentBounds()
   const display = screen.getDisplayMatching({
     x: captureOrigin.x,
@@ -170,17 +176,40 @@ async function emitHoverZonesFor(
     width: region.w,
     height: region.h
   })
-  const build = await buildHoverZones(result, {
+  const build = await buildHoverZones(displayResult, {
     region,
     captureOrigin,
     overlayOrigin: { x: overlayBounds.x, y: overlayBounds.y },
     scaleFactor: display.scaleFactor
   })
-  const payload = hoverPayload(result, build, frameId)
+  const payload = hoverPayload(displayResult, build, frameId)
   console.log(
-    `[${label}] hover zones: ${build.zones.length} tokens, ${build.debugChars.length} chars (frame ${payload.frameId})`
+    `[${label}] hover zones: ${build.zones.length} tokens, ${build.debugChars.length} chars (frame ${payload.frameId}, ${orientation})`
   )
   overlay.webContents.send(Channels.hoverZones, payload)
+}
+
+// 90° CCW back-rotation: the renderer pre-rotated the captured frame to
+// make tategaki text horizontal for Vision; un-rotate here so hover zones
+// land on the original (vertical) text positions. Vision's rotated-image
+// bbox (x', y', w', h') maps back to original (rotImgH - y' - h', x', h', w').
+// rotImgH is the rotated image's height, which equals the ORIGINAL image's
+// width (height in rotated space).
+function rotateRectBackCCW(rect: OcrRect, rotImgH: number): OcrRect {
+  return { x: rotImgH - rect.y - rect.h, y: rect.x, w: rect.h, h: rect.w }
+}
+
+function unrotateOcrResult(r: OcrResult): OcrResult {
+  const rotH = r.imageHeight
+  return {
+    imageWidth: r.imageHeight,
+    imageHeight: r.imageWidth,
+    lines: r.lines.map((line) => ({
+      text: line.text,
+      rect: rotateRectBackCCW(line.rect, rotH),
+      chars: line.chars.map((c) => ({ text: c.text, rect: rotateRectBackCCW(c.rect, rotH) }))
+    }))
+  }
 }
 
 async function emitTestVnHoverZones(
@@ -190,7 +219,11 @@ async function emitTestVnHoverZones(
 ): Promise<void> {
   if (!testVnWindow || testVnWindow.isDestroyed()) return
   const winBounds = testVnWindow.getContentBounds()
-  await emitHoverZonesFor('test-vn', result, region, winBounds, png)
+  // Test VN's capturePage path doesn't go through the renderer's
+  // rotation pipeline, so it's always horizontal. Vertical text inside
+  // the Test VN window (line 11) won't hover-translate; use ⌘⇧T or
+  // capture an external window via getDisplayMedia for vertical content.
+  await emitHoverZonesFor('test-vn', result, region, winBounds, png, 'horizontal')
 }
 
 async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
@@ -208,7 +241,7 @@ async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
     console.log(`[real-window] window ${activeSourceWindowId} not on-screen`)
     return
   }
-  await emitHoverZonesFor('real-window', data.result, data.region, bounds, data.png)
+  await emitHoverZonesFor('real-window', data.result, data.region, bounds, data.png, data.orientation)
 }
 
 // Crop the source PNG around a single OCR'd line, with generous padding
@@ -533,9 +566,14 @@ app.whenReady().then(async () => {
   const okForce = globalShortcut.register('CommandOrControl+Shift+T', () => {
     void handleForceTranslate()
   })
-  if (!okMode || !okDebug || !okForce) {
+  // Cmd+Shift+J for tategaki (vertical) toggle. Avoids +V/+T/+R which are
+  // common app-level conflicts that globalShortcut would preempt.
+  const okVert = globalShortcut.register('CommandOrControl+Shift+J', () => {
+    overlay?.webContents.send(Channels.hoverHotkey, 'toggle-vertical')
+  })
+  if (!okMode || !okDebug || !okForce || !okVert) {
     console.warn(
-      `[hotkeys] register failed: mode=${okMode}, debug=${okDebug}, force=${okForce}`
+      `[hotkeys] register failed: mode=${okMode}, debug=${okDebug}, force=${okForce}, vert=${okVert}`
     )
   }
 

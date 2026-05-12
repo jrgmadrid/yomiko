@@ -11,12 +11,13 @@
 // In region-selection mode, callers register `onFullFrame` to get the
 // uncropped ImageBitmap each tick (renders into the region selector preview).
 
-import type { SharedRegion } from '@shared/ipc'
+import type { Orientation, SharedRegion } from '@shared/ipc'
 import { dHashHex } from './dhash'
 
 export interface CaptureHandle {
   stop(): void
   setRegion(region: SharedRegion | null): void
+  setOrientation(o: Orientation): void
   onFullFrame(cb: ((bitmap: ImageBitmap) => void) | null): void
 }
 
@@ -54,6 +55,7 @@ export async function startCapture(): Promise<CaptureHandle> {
   const ctx: CanvasRenderingContext2D = rawCtx
 
   let region: SharedRegion | null = null
+  let orientation: Orientation = 'horizontal'
   let onFullFrameCb: ((bitmap: ImageBitmap) => void) | null = null
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -91,13 +93,44 @@ export async function startCapture(): Promise<CaptureHandle> {
             region.w,
             region.h
           )
-          const hash = dHashHex(canvas, region.x, region.y, region.w, region.h)
+
+          // For tategaki source text, pre-rotate the crop 90° CCW so Vision
+          // sees horizontal text. CCW (not CW): vertical JP reads right-to-
+          // left, and CCW makes the rightmost column become the topmost
+          // rotated row — matching Vision's left-to-right reading order.
+          // Main rotates bboxes back when building hover zones.
+          let outCanvas = cropCanvas
+          if (orientation === 'vertical') {
+            const rotated = document.createElement('canvas')
+            rotated.width = cropCanvas.height
+            rotated.height = cropCanvas.width
+            const rotCtx = rotated.getContext('2d')
+            if (rotCtx) {
+              rotCtx.translate(0, rotated.height)
+              rotCtx.rotate(-Math.PI / 2)
+              rotCtx.drawImage(cropCanvas, 0, 0)
+              outCanvas = rotated
+            }
+          }
+
+          // Hash on the output canvas, not the source crop. Hashing the
+          // source would make the hash invariant to orientation toggles —
+          // toggling vertical would not retrigger OCR because the
+          // stabilizer would see the same hash. Output-canvas hash forces
+          // a refire whenever the transform changes.
+          const hash = dHashHex(outCanvas, 0, 0, outCanvas.width, outCanvas.height)
           const blob = await new Promise<Blob | null>((resolve) =>
-            cropCanvas.toBlob((b) => resolve(b), 'image/png')
+            outCanvas.toBlob((b) => resolve(b), 'image/png')
           )
           if (blob) {
             const buf = await blob.arrayBuffer()
-            window.vnr.captureFrame({ data: buf, region, ts: Date.now(), hash })
+            window.vnr.captureFrame({
+              data: buf,
+              region,
+              ts: Date.now(),
+              hash,
+              orientation
+            })
           }
         }
       }
@@ -117,6 +150,9 @@ export async function startCapture(): Promise<CaptureHandle> {
     },
     setRegion(r) {
       region = r
+    },
+    setOrientation(o) {
+      orientation = o
     },
     onFullFrame(cb) {
       onFullFrameCb = cb

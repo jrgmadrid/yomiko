@@ -39,6 +39,8 @@ export class WindowsMediaBackend
     const lines = (out.lines ?? []).map(
       (text): OcrLine => ({ text, rect: ZERO_RECT, chars: [] })
     )
-    return { lines }
+    // Win sidecar doesn't return bboxes yet; image dims unused downstream
+    // since there are no rects to un-rotate.
+    return { lines, imageWidth: 0, imageHeight: 0 }
   }
 }

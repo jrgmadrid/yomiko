@@ -38,6 +38,13 @@ function App(): React.JSX.Element {
   const [hoverDebug, setHoverDebug] = useState(
     () => new URLSearchParams(window.location.search).get('hoverDebug') !== null
   )
+  // Tategaki mode. Renderer pre-rotates the captured PNG 90° CCW so
+  // Vision (poor on vertical Japanese) sees horizontal text. Main rotates
+  // bboxes back. Toggleable mid-session via ⌘⇧J.
+  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
+  useEffect(() => {
+    captureRef.current?.setOrientation(orientation)
+  }, [orientation])
   // Subscribed at App level (not inside HoverProtoLayer) so the payload
   // survives hover-mode toggles. OCRSource only fires once for static
   // windows like TextEdit; if HoverProtoLayer mounts after that single
@@ -52,6 +59,8 @@ function App(): React.JSX.Element {
       window.vnr.onHoverHotkey((key) => {
         if (key === 'toggle-mode') setHoverMode((v) => !v)
         else if (key === 'toggle-debug') setHoverDebug((v) => !v)
+        else if (key === 'toggle-vertical')
+          setOrientation((o) => (o === 'horizontal' ? 'vertical' : 'horizontal'))
       }),
     []
   )
@@ -120,6 +129,10 @@ function App(): React.JSX.Element {
     handle: CaptureHandle
   ): void => {
     captureRef.current = handle
+    // Push current toggle state into the freshly-minted handle so a user
+    // who toggled tategaki *before* opening the picker has it applied to
+    // the first frame, not just to subsequent toggles.
+    handle.setOrientation(orientation)
     setActiveSource(source)
     setPickerOpen(false)
   }
@@ -137,6 +150,11 @@ function App(): React.JSX.Element {
               {hoverMode && (
                 <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-emerald-300">
                   hover{hoverDebug ? ' · debug' : ''}
+                </span>
+              )}
+              {orientation === 'vertical' && (
+                <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-amber-300">
+                  縦
                 </span>
               )}
             </div>

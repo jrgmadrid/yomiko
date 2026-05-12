@@ -78,6 +78,6 @@ export class AppleVisionBackend
         chars: synthesizeCharRects(l.text, lineRect)
       }
     })
-    return { lines }
+    return { lines, imageWidth: width, imageHeight: height }
   }
 }

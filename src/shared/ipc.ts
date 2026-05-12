@@ -56,7 +56,12 @@ export interface RegionTranslationPayload {
   translation: string
 }
 
-export type HoverHotkey = 'toggle-mode' | 'toggle-debug'
+export type HoverHotkey = 'toggle-mode' | 'toggle-debug' | 'toggle-vertical'
+
+/** Source text orientation. 'vertical' means tategaki — the renderer
+ *  pre-rotates the captured frame 90° CCW before OCR so Vision (poor on
+ *  vertical Japanese) sees horizontal text. Main rotates bboxes back. */
+export type Orientation = 'horizontal' | 'vertical'
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
 
@@ -140,6 +145,9 @@ export interface CaptureFramePayload {
   ts: number
   /** 64-bit dHash of the cropped frame as a 16-char lowercase hex string. */
   hash: string
+  /** Indicates the renderer pre-rotated the PNG so main can rotate bboxes
+   *  back. 'horizontal' means data is in original orientation. */
+  orientation: Orientation
 }
 
 /** A rectangle in overlay-window CSS pixels (top-left origin, post-DPR). */
