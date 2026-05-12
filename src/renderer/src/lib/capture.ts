@@ -77,6 +77,14 @@ export async function startCapture(): Promise<CaptureHandle> {
       }
 
       if (region && region.w > 0 && region.h > 0) {
+        // Snapshot the orientation at tick start. The toBlob/arrayBuffer
+        // awaits below would otherwise let a mid-tick `setOrientation`
+        // call decouple the rotation-decision (sync, near the top) from
+        // the payload field (read after the awaits), producing an
+        // unrotated PNG paired with an orientation='vertical' flag —
+        // exactly the race that produced "chrome leaks through, no JP
+        // tokens" in the first post-toggle OCR fire.
+        const tickOrientation = orientation
         const cropCanvas = document.createElement('canvas')
         cropCanvas.width = region.w
         cropCanvas.height = region.h
@@ -100,7 +108,7 @@ export async function startCapture(): Promise<CaptureHandle> {
           // rotated row — matching Vision's left-to-right reading order.
           // Main rotates bboxes back when building hover zones.
           let outCanvas = cropCanvas
-          if (orientation === 'vertical') {
+          if (tickOrientation === 'vertical') {
             const rotated = document.createElement('canvas')
             rotated.width = cropCanvas.height
             rotated.height = cropCanvas.width
@@ -110,6 +118,9 @@ export async function startCapture(): Promise<CaptureHandle> {
               rotCtx.rotate(-Math.PI / 2)
               rotCtx.drawImage(cropCanvas, 0, 0)
               outCanvas = rotated
+              console.log(
+                `[capture] rotated ${cropCanvas.width}×${cropCanvas.height} → ${outCanvas.width}×${outCanvas.height} (vertical mode)`
+              )
             }
           }
 
@@ -129,7 +140,7 @@ export async function startCapture(): Promise<CaptureHandle> {
               region,
               ts: Date.now(),
               hash,
-              orientation
+              orientation: tickOrientation
             })
           }
         }
