@@ -74,7 +74,7 @@ For development without a real VN: `window.vnr.openTestVN()` in DevTools opens a
 
 ## License
 
-TBD. All rights reserved until I pick one.
+[AGPL-3.0-or-later](LICENSE). Forks and derivatives stay open under the same terms.
 
 ---
 

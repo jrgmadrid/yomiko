@@ -2,6 +2,8 @@
   "name": "yomiko-proxy",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-or-later",
+  "author": "Jacob Madrid",
   "description": "Cloudflare Worker that forwards translation requests from the yomiko app to DeepSeek using the maintainer's API key.",
   "scripts": {
     "dev": "wrangler dev",

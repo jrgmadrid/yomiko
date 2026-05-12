@@ -2,6 +2,8 @@
   "name": "yomiko",
   "version": "0.1.0",
   "description": "Japanese visual novel reader with hover dictionary",
+  "license": "AGPL-3.0-or-later",
+  "author": "Jacob Madrid",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
