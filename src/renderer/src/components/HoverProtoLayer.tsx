@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   HoverZone,
   HoverZonePayload,
@@ -100,6 +100,64 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
       cancelled = true
     }
   }, [translation])
+
+  // Mining hotkey (Cmd+Shift+M) needs the live hover + translation state.
+  // useEffect subscribers see stale closures, so route through a ref that
+  // every render refreshes; the subscriber reads from the ref at fire time.
+  const miningStateRef = useRef<{
+    payload: HoverZonePayload | null
+    hovered: HoveredState | null
+    translation: RegionTranslationPayload | null
+  }>({ payload, hovered, translation })
+  miningStateRef.current = { payload, hovered, translation }
+
+  useEffect(() => {
+    const offHotkey = window.vnr.onMiningHotkey(() => {
+      const s = miningStateRef.current
+      if (!s.payload) {
+        console.log('[mining] no frame in flight; nothing to mine')
+        return
+      }
+      let lineIdx: number
+      let hoveredSurface: string | null = null
+      let hoveredGroup: SharedWordGroup | null = null
+      if (s.hovered) {
+        lineIdx = s.hovered.zone.lineIdx
+        hoveredSurface = s.hovered.zone.surface
+        hoveredGroup = s.hovered.zone.group
+      } else if (s.translation && s.translation.frameId === s.payload.frameId) {
+        // No active hover but a fresh translation: mine the focused line
+        // (Word/Reading/Meaning blank; Sentence/Translation/Picture filled).
+        lineIdx = s.translation.lineIdx
+      } else {
+        console.log('[mining] no hover, no fresh translation; skipping')
+        return
+      }
+      const useVlm =
+        s.translation &&
+        s.translation.frameId === s.payload.frameId &&
+        s.translation.lineIdx === lineIdx
+      window.vnr.submitToAnki({
+        frameId: s.payload.frameId,
+        lineIdx,
+        hoveredSurface,
+        hoveredGroup,
+        vlmText: useVlm ? s.translation!.text : null,
+        vlmTranslation: useVlm ? s.translation!.translation : null
+      })
+    })
+    const offResult = window.vnr.onMiningResult((r) => {
+      if (r.ok) {
+        console.log(`[mining] card added (noteId=${r.noteId})`)
+      } else {
+        console.warn(`[mining] failed (${r.error ?? 'unknown'}): ${r.message ?? ''}`)
+      }
+    })
+    return () => {
+      offHotkey()
+      offResult()
+    }
+  }, [])
 
   // Resolve the dictionary entry for the hovered token using the VLM-
   // tokenized line. Gated on shiftHeld: don't pay for the kuromoji+sqlite

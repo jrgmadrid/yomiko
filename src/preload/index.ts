@@ -60,7 +60,9 @@ import {
   type HoverZonePayload,
   type RegionTranslationPayload,
   type TranslateRegionRequest,
-  type ForceTranslationEvent
+  type ForceTranslationEvent,
+  type SubmitToAnkiRequest,
+  type MiningResultPayload
 } from '@shared/ipc'
 
 const vnr = {
@@ -150,6 +152,23 @@ const vnr = {
     ipcRenderer.on(Channels.forceTranslation, listener)
     return () => {
       ipcRenderer.removeListener(Channels.forceTranslation, listener)
+    }
+  },
+  submitToAnki: (req: SubmitToAnkiRequest): void => {
+    ipcRenderer.send(Channels.submitToAnki, req)
+  },
+  onMiningHotkey: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on(Channels.miningHotkey, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.miningHotkey, listener)
+    }
+  },
+  onMiningResult: (cb: (r: MiningResultPayload) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, r: MiningResultPayload): void => cb(r)
+    ipcRenderer.on(Channels.miningResult, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.miningResult, listener)
     }
   }
 }

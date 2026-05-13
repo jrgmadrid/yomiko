@@ -11,7 +11,9 @@ import {
   HoverZonePayload,
   RegionTranslationPayload,
   TranslateRegionRequest,
-  ForceTranslationEvent
+  ForceTranslationEvent,
+  SubmitToAnkiRequest,
+  MiningResultPayload
 } from '@shared/ipc'
 
 export interface DevRenderOptions {
@@ -43,6 +45,9 @@ export interface VnrApi {
   translateRegion: (req: TranslateRegionRequest) => void
   onRegionTranslation: (cb: (payload: RegionTranslationPayload) => void) => () => void
   onForceTranslation: (cb: (event: ForceTranslationEvent) => void) => () => void
+  submitToAnki: (req: SubmitToAnkiRequest) => void
+  onMiningHotkey: (cb: () => void) => () => void
+  onMiningResult: (cb: (r: MiningResultPayload) => void) => () => void
 }
 
 declare global {

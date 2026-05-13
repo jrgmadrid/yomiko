@@ -19,7 +19,10 @@ export const Channels = {
   hoverHotkey: 'hover:hotkey',
   translateRegion: 'translate:region',
   regionTranslation: 'region:translation',
-  forceTranslation: 'force:translation'
+  forceTranslation: 'force:translation',
+  miningHotkey: 'mining:hotkey',
+  submitToAnki: 'mining:submit-to-anki',
+  miningResult: 'mining:result'
 } as const
 
 /** Main → renderer: full-frame VLM translate driven by the Cmd+Shift+T
@@ -57,6 +60,29 @@ export interface RegionTranslationPayload {
 }
 
 export type HoverHotkey = 'toggle-mode' | 'toggle-debug'
+
+/** Renderer → main: payload for the Cmd+Shift+M mining hotkey. The renderer
+ *  packages its current hover + translation state at the moment the hotkey
+ *  fires; main reconciles against the latestFrame latch (frameId match) and
+ *  composes the Anki card. Optional fields are null when the hotkey fires
+ *  with no token under cursor (still mines the focused line). */
+export interface SubmitToAnkiRequest {
+  frameId: number
+  lineIdx: number
+  hoveredSurface: string | null
+  hoveredGroup: SharedWordGroup | null
+  vlmText: string | null
+  vlmTranslation: string | null
+}
+
+/** Main → renderer: result of an Anki mining attempt. The renderer can use
+ *  this to surface a brief toast or beep in the overlay. */
+export interface MiningResultPayload {
+  ok: boolean
+  noteId?: number
+  error?: 'ANKI_UNREACHABLE' | 'ANKI_ERROR' | 'DUPLICATE' | 'STALE_FRAME' | 'NO_TARGET'
+  message?: string
+}
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
 

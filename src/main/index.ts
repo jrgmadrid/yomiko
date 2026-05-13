@@ -19,6 +19,15 @@ import { lookupGroup } from './dict/deinflect'
 import { translateRegionImage, persistCache } from './translate/vlm'
 import { listWindows } from './capture/picker'
 import {
+  ankiVersion,
+  storeMediaFile,
+  addNote,
+  AnkiUnreachableError,
+  AnkiDuplicateError
+} from './anki/client'
+import { composeNote, type MiningInput } from './anki/compose'
+import { getAnkiConfig } from './storage/anki-config'
+import {
   configureDisplayMediaHandler,
   setPendingSource,
   clearPendingSource,
@@ -27,6 +36,7 @@ import {
 import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
+  MiningResultPayload,
   RegionTranslationPayload,
   SharedJmdictEntry,
   SharedJmdictSense,
@@ -34,6 +44,7 @@ import type {
   SharedRegion,
   SharedWindowSource,
   SharedWordGroup,
+  SubmitToAnkiRequest,
   TranslateRegionRequest
 } from '@shared/ipc'
 
@@ -310,6 +321,96 @@ async function handleForceTranslate(): Promise<void> {
   })
 }
 
+// Cmd+Shift+M → mine the currently hovered token (or focused line) to
+// Anki. The renderer holds the live hover state, so the hotkey only triggers
+// over IPC; the renderer responds with a SubmitToAnkiRequest, and main
+// composes the card from the latestFrame latch + dict lookup + AnkiConnect.
+function sendMiningResult(payload: MiningResultPayload): void {
+  if (!overlay || overlay.isDestroyed()) return
+  overlay.webContents.send(Channels.miningResult, payload)
+}
+
+function extractGlosses(group: SharedWordGroup): string[] | null {
+  const result = lookupGroup(group)
+  const entry = result.entries[0]
+  if (!entry) return null
+  // Numbered glosses, one sense per line. Matches the readable format of
+  // jp-mining-note's WordMeaning field without HTML; users with HTML-rich
+  // templates can post-process.
+  return entry.senses.map((sense, i) => {
+    const text = sense.gloss.map((g) => g.text).join('; ')
+    return `${i + 1}. ${text}`
+  })
+}
+
+async function handleSubmitToAnki(req: SubmitToAnkiRequest): Promise<void> {
+  const frame = latestFrame
+  if (!frame || frame.frameId !== req.frameId) {
+    console.log(
+      `[mining] stale frameId ${req.frameId} (current ${frame?.frameId ?? 'none'}); dropping`
+    )
+    sendMiningResult({ ok: false, error: 'STALE_FRAME', message: 'frame advanced before mine' })
+    return
+  }
+  const line = frame.result.lines[req.lineIdx]
+  if (!line) {
+    sendMiningResult({ ok: false, error: 'NO_TARGET', message: `no line ${req.lineIdx} in frame` })
+    return
+  }
+  const crop = cropAroundLine(frame.png, line.rect)
+  if (!crop) {
+    sendMiningResult({ ok: false, error: 'NO_TARGET', message: 'crop empty' })
+    return
+  }
+
+  const config = await getAnkiConfig()
+  const filename = `yomiko-${Date.now()}.png`
+  const sentence = req.vlmText ?? line.text
+
+  let reading: string | null = null
+  let glosses: string[] | null = null
+  if (req.hoveredGroup) {
+    reading = req.hoveredGroup.reading || null
+    glosses = extractGlosses(req.hoveredGroup)
+  }
+
+  const input: MiningInput = {
+    surface: req.hoveredSurface,
+    reading,
+    glosses,
+    sentence,
+    sentenceTranslation: req.vlmTranslation,
+    pictureFilename: filename
+  }
+
+  console.log(
+    `[mining] frame=${req.frameId} line=${req.lineIdx} surface="${req.hoveredSurface ?? '(none)'}" → ${config.deckName}/${config.modelName}`
+  )
+
+  try {
+    await storeMediaFile(
+      { filename, data: crop.toString('base64') },
+      config.ankiConnectUrl
+    )
+    const payload = composeNote(input, config)
+    const noteId = await addNote(payload, config.ankiConnectUrl)
+    console.log(`[mining] addNote ok, noteId=${noteId}`)
+    sendMiningResult({ ok: true, noteId })
+  } catch (err) {
+    if (err instanceof AnkiUnreachableError) {
+      console.warn(`[mining] AnkiConnect unreachable: ${err.message}`)
+      sendMiningResult({ ok: false, error: 'ANKI_UNREACHABLE', message: err.message })
+    } else if (err instanceof AnkiDuplicateError) {
+      console.log(`[mining] duplicate rejected: ${err.message}`)
+      sendMiningResult({ ok: false, error: 'DUPLICATE', message: err.message })
+    } else {
+      const msg = (err as Error).message
+      console.warn(`[mining] addNote failed: ${msg}`)
+      sendMiningResult({ ok: false, error: 'ANKI_ERROR', message: msg })
+    }
+  }
+}
+
 function startTestVnPoll(region: SharedRegion): void {
   testVnRegion = region
   testVnLastEmit = ''
@@ -451,6 +552,10 @@ app.whenReady().then(async () => {
     void handleTranslateRegion(req)
   })
 
+  ipcMain.on(Channels.submitToAnki, (_event, req: SubmitToAnkiRequest) => {
+    void handleSubmitToAnki(req)
+  })
+
   ipcMain.handle(
     Channels.regionsGet,
     async (_event, windowName: string): Promise<SharedRegion | null> => getRegion(windowName)
@@ -533,11 +638,28 @@ app.whenReady().then(async () => {
   const okForce = globalShortcut.register('CommandOrControl+Shift+T', () => {
     void handleForceTranslate()
   })
-  if (!okMode || !okDebug || !okForce) {
+  const okMine = globalShortcut.register('CommandOrControl+Shift+M', () => {
+    overlay?.webContents.send(Channels.miningHotkey)
+  })
+  if (!okMode || !okDebug || !okForce || !okMine) {
     console.warn(
-      `[hotkeys] register failed: mode=${okMode}, debug=${okDebug}, force=${okForce}`
+      `[hotkeys] register failed: mode=${okMode}, debug=${okDebug}, force=${okForce}, mine=${okMine}`
     )
   }
+
+  // Best-effort connectivity probe so the user knows up-front whether Anki
+  // is reachable. Fire-and-forget; the mining hotkey re-checks per-call.
+  void (async () => {
+    try {
+      const config = await getAnkiConfig()
+      const v = await ankiVersion(config.ankiConnectUrl)
+      console.log(`[anki] AnkiConnect detected (v${v}) at ${config.ankiConnectUrl}`)
+    } catch (err) {
+      console.log(
+        `[anki] not reachable on startup: ${(err as Error).message} — mining will surface errors when used`
+      )
+    }
+  })()
 
   manualSource = new ManualPasteSource()
   bindSource(manualSource)
