@@ -157,7 +157,7 @@ function App(): React.JSX.Element {
               <span>{statusLabel(status, activeSource)}</span>
               {hoverMode && (
                 <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-emerald-300">
-                  hover{hoverDebug ? ' · debug' : ''}
+                  hover · ⇧ dict{hoverDebug ? ' · debug' : ''}
                 </span>
               )}
               <span
