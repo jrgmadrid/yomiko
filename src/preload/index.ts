@@ -62,7 +62,8 @@ import {
   type TranslateRegionRequest,
   type ForceTranslationEvent,
   type SubmitToAnkiRequest,
-  type MiningResultPayload
+  type MiningResultPayload,
+  type VlmStatus
 } from '@shared/ipc'
 
 const vnr = {
@@ -155,6 +156,16 @@ const vnr = {
     ipcRenderer.on(Channels.forceTranslation, listener)
     return () => {
       ipcRenderer.removeListener(Channels.forceTranslation, listener)
+    }
+  },
+  getVlmStatus: (): Promise<VlmStatus> => {
+    return ipcRenderer.invoke(Channels.vlmStatusGet)
+  },
+  onVlmStatus: (cb: (s: VlmStatus) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, s: VlmStatus): void => cb(s)
+    ipcRenderer.on(Channels.vlmStatus, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.vlmStatus, listener)
     }
   },
   submitToAnki: (req: SubmitToAnkiRequest): void => {

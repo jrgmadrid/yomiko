@@ -19,6 +19,7 @@
 import { app, nativeImage } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import type { VlmStatus } from '@shared/ipc'
 
 const MAX_CACHE_ENTRIES = 200
 // Cap for the longest side. Below ~2k, Qwen still benefits from extra
@@ -59,6 +60,30 @@ const cache = new Map<string, VlmResult>()
 let cacheLoaded = false
 // undefined = not yet read, null = absent / disabled, otherwise live creds.
 let creds: ProxyCreds | null | undefined = undefined
+
+// Status state, exposed to the renderer for the overlay's status strip.
+// Listeners are notified on every transition (including the initial probe
+// during readCreds); the dedupe lives in setStatus so callers don't have
+// to track previous value themselves.
+let vlmStatus: VlmStatus = 'no-creds'
+const statusListeners = new Set<(s: VlmStatus) => void>()
+
+function setStatus(next: VlmStatus): void {
+  if (vlmStatus === next) return
+  vlmStatus = next
+  for (const cb of statusListeners) cb(next)
+}
+
+export function getVlmStatus(): VlmStatus {
+  return vlmStatus
+}
+
+export function onVlmStatusChange(cb: (s: VlmStatus) => void): () => void {
+  statusListeners.add(cb)
+  return () => {
+    statusListeners.delete(cb)
+  }
+}
 
 interface CacheFile {
   version: number
@@ -124,11 +149,20 @@ function readCreds(): ProxyCreds | null {
       '[vlm] no proxy creds (set YOMIKO_PROXY_URL+YOMIKO_PROXY_TOKEN or proxyUrl+proxyToken in settings.json); hover translation disabled'
     )
     creds = null
+    setStatus('no-creds')
     return null
   }
   creds = { baseUrl: baseUrl.replace(/\/$/, ''), token }
   console.log(`[vlm] proxy ready (${new URL(creds.baseUrl).host})`)
+  setStatus('ready')
   return creds
+}
+
+/** Probe the proxy creds at startup so the renderer's status pill has a
+ *  meaningful initial value. Idempotent — readCreds() is memoized. */
+export function probeVlmCreds(): VlmStatus {
+  readCreds()
+  return vlmStatus
 }
 
 function recordHit(key: string): VlmResult | undefined {
@@ -183,12 +217,14 @@ export async function translateRegionImage(
     })
   } catch (err) {
     console.warn(`[vlm] fetch failed: ${(err as Error).message}`)
+    setStatus('unreachable')
     return null
   }
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as VisionResponse | null
     console.warn(`[vlm] HTTP ${res.status}: ${body?.error ?? res.statusText}`)
+    setStatus('unreachable')
     return null
   }
 
@@ -197,15 +233,18 @@ export async function translateRegionImage(
     data = (await res.json()) as VisionResponse
   } catch {
     console.warn('[vlm] non-JSON response')
+    setStatus('unreachable')
     return null
   }
   if (!data.text || !data.translation) {
     console.warn(`[vlm] missing fields: ${JSON.stringify(data).slice(0, 200)}`)
+    setStatus('unreachable')
     return null
   }
 
   const result: VlmResult = { text: data.text, translation: data.translation }
   recordMiss(cacheKey, result)
+  setStatus('ready')
   return result
 }
 

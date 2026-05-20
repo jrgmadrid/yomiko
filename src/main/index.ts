@@ -16,7 +16,13 @@ import { groupTokens } from './tokenize/grouping'
 import type { FrameOcrData } from './sources/types'
 import { lookup as jmdictLookup, close as jmdictClose } from './dict/jmdict'
 import { lookupGroup } from './dict/deinflect'
-import { translateRegionImage, persistCache } from './translate/vlm'
+import {
+  translateRegionImage,
+  persistCache,
+  probeVlmCreds,
+  getVlmStatus,
+  onVlmStatusChange
+} from './translate/vlm'
 import { listWindows } from './capture/picker'
 import {
   ankiVersion,
@@ -561,6 +567,16 @@ app.whenReady().then(async () => {
     overlay.webContents.send(Channels.hoverZones, lastHoverPayload)
   })
 
+  ipcMain.handle(Channels.vlmStatusGet, () => getVlmStatus())
+
+  // Forward VLM status transitions to the overlay so the status strip
+  // updates on creds change, unreachable failure, or recovery.
+  onVlmStatusChange((s) => {
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.webContents.send(Channels.vlmStatus, s)
+    }
+  })
+
   ipcMain.on(Channels.captureFrame, (_event, payload: CaptureFramePayload) => {
     const src = getOrCreateOcrSource()
     if (!src) return
@@ -665,6 +681,10 @@ app.whenReady().then(async () => {
       `[hotkeys] register failed: mode=${okMode}, debug=${okDebug}, force=${okForce}, mine=${okMine}`
     )
   }
+
+  // Probe the VLM proxy creds at startup so the status pill in the
+  // overlay strip has a meaningful initial value before any hover fires.
+  probeVlmCreds()
 
   // Best-effort connectivity probe so the user knows up-front whether Anki
   // is reachable. Fire-and-forget; the mining hotkey re-checks per-call.

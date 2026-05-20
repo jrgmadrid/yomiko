@@ -21,6 +21,8 @@ export const Channels = {
   translateRegion: 'translate:region',
   regionTranslation: 'region:translation',
   forceTranslation: 'force:translation',
+  vlmStatusGet: 'vlm:status-get',
+  vlmStatus: 'vlm:status',
   miningHotkey: 'mining:hotkey',
   submitToAnki: 'mining:submit-to-anki',
   miningResult: 'mining:result'
@@ -61,6 +63,16 @@ export interface RegionTranslationPayload {
 }
 
 export type HoverHotkey = 'toggle-mode' | 'toggle-debug'
+
+/** Current state of the VLM proxy used for on-hover transcription +
+ *  translation. Surfaced in the overlay's status strip so the user can
+ *  see at a glance whether translation will work.
+ *
+ *  - 'ready'       — creds present, last call succeeded (or none yet)
+ *  - 'no-creds'    — no proxyUrl/Token in settings.json or env vars
+ *  - 'unreachable' — creds present but the most recent call failed (network/HTTP)
+ */
+export type VlmStatus = 'ready' | 'no-creds' | 'unreachable'
 
 /** Renderer → main: payload for the Cmd+Shift+M mining hotkey. The renderer
  *  packages its current hover + translation state at the moment the hotkey

@@ -11,7 +11,8 @@ import type {
   SharedLookupResult,
   SharedWindowSource,
   SharedWordGroup,
-  SourceStatus
+  SourceStatus,
+  VlmStatus
 } from '@shared/ipc'
 
 interface RenderedLine {
@@ -44,6 +45,16 @@ function App(): React.JSX.Element {
   // emit, an internal subscription would never see it.
   const [hoverPayload, setHoverPayload] = useState<HoverZonePayload | null>(null)
   useEffect(() => window.vnr.onHoverZones(setHoverPayload), [])
+
+  // VLM proxy status, surfaced as a pill in the status strip so the user
+  // knows whether on-hover translation will work. Main owns the state and
+  // pushes transitions; we ask for the current value on mount because main
+  // already probed creds at startup before the renderer subscribes.
+  const [vlmStatus, setVlmStatus] = useState<VlmStatus>('no-creds')
+  useEffect(() => {
+    void window.vnr.getVlmStatus().then(setVlmStatus)
+    return window.vnr.onVlmStatus(setVlmStatus)
+  }, [])
 
   // Ask main to re-emit its cached HoverZonePayload whenever hover mode
   // turns on (including initial mount when the default is on). Backstop
@@ -149,6 +160,12 @@ function App(): React.JSX.Element {
                   hover{hoverDebug ? ' · debug' : ''}
                 </span>
               )}
+              <span
+                className={`rounded px-1.5 py-0.5 ${vlmPillClass(vlmStatus)}`}
+                title={vlmPillTooltip(vlmStatus)}
+              >
+                {vlmPillLabel(vlmStatus)}
+              </span>
             </div>
             <button
               type="button"
@@ -203,6 +220,22 @@ function pipColor(status: SourceStatus, active: SharedWindowSource | null): stri
 function statusLabel(status: SourceStatus, active: SharedWindowSource | null): string {
   if (!active) return 'no source'
   return status
+}
+
+function vlmPillLabel(s: VlmStatus): string {
+  if (s === 'ready') return 'VLM ready'
+  return 'VLM offline ⚠'
+}
+
+function vlmPillClass(s: VlmStatus): string {
+  if (s === 'ready') return 'bg-emerald-400/20 text-emerald-300'
+  return 'bg-amber-400/25 text-amber-300'
+}
+
+function vlmPillTooltip(s: VlmStatus): string {
+  if (s === 'ready') return 'VLM proxy ready'
+  if (s === 'unreachable') return 'VLM proxy unreachable — last call failed (check network / proxy)'
+  return 'No proxy creds — set proxyUrl/proxyToken in ~/Library/Application Support/yomiko/settings.json or YOMIKO_PROXY_URL/TOKEN env vars'
 }
 
 export default App

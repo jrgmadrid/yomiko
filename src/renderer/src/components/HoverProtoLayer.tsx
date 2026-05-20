@@ -262,6 +262,11 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
                 {translationFresh.text}
               </div>
               <div className="mt-1">{translationFresh.translation}</div>
+              {!shiftHeld && (
+                <div className="mt-2 text-[10px] tracking-wide text-white/30">
+                  ⇧ for dictionary
+                </div>
+              )}
             </>
           ) : (
             <div
