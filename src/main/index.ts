@@ -36,6 +36,7 @@ import {
 import { getRegion, setRegion } from './storage/regions'
 import type {
   CaptureFramePayload,
+  HoverZonePayload,
   MiningResultPayload,
   RegionTranslationPayload,
   SharedJmdictEntry,
@@ -105,6 +106,12 @@ interface LatestFrame {
 }
 let frameCounter = 0
 let latestFrame: LatestFrame | null = null
+// Most recent HoverZonePayload built for the active source. Replayed on
+// renderer-initiated resync (overlay mount, hover-mode-on) so static-window
+// targets — where OCR's stabilizer fires once and never again — don't
+// strand the renderer with empty zone state across mode toggles or
+// dev-reload remounts.
+let lastHoverPayload: HoverZonePayload | null = null
 
 function getWindowInfo(): MacWindowInfo | null {
   if (process.platform !== 'darwin') return null
@@ -191,6 +198,7 @@ async function emitHoverZonesFor(
   console.log(
     `[${label}] hover zones: ${build.zones.length} tokens, ${build.debugChars.length} chars (frame ${payload.frameId})`
   )
+  lastHoverPayload = payload
   overlay.webContents.send(Channels.hoverZones, payload)
 }
 
@@ -535,11 +543,22 @@ app.whenReady().then(async () => {
     const m = sourceId.match(/^window:(\d+):/)
     activeSourceWindowId = m && m[1] ? Number(m[1]) : null
     console.log(`[capture] active source window id = ${activeSourceWindowId}`)
+    // Drop the cached hover payload — it belongs to the previous source.
+    // A fresh OCR fire on the new source will repopulate it.
+    lastHoverPayload = null
   })
 
   ipcMain.on(Channels.captureStop, () => {
     clearPendingSource()
     stopTestVnPoll()
+    lastHoverPayload = null
+  })
+
+  ipcMain.on(Channels.hoverResync, () => {
+    if (!lastHoverPayload) return
+    if (!overlay || overlay.isDestroyed()) return
+    console.log(`[hover-resync] re-emitting frame ${lastHoverPayload.frameId}`)
+    overlay.webContents.send(Channels.hoverZones, lastHoverPayload)
   })
 
   ipcMain.on(Channels.captureFrame, (_event, payload: CaptureFramePayload) => {

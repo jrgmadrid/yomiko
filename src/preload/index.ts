@@ -137,6 +137,9 @@ const vnr = {
       ipcRenderer.removeListener(Channels.hoverHotkey, listener)
     }
   },
+  requestHoverResync: (): void => {
+    ipcRenderer.send(Channels.hoverResync)
+  },
   translateRegion: (req: TranslateRegionRequest): void => {
     ipcRenderer.send(Channels.translateRegion, req)
   },

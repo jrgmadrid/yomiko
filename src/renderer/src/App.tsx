@@ -45,6 +45,16 @@ function App(): React.JSX.Element {
   const [hoverPayload, setHoverPayload] = useState<HoverZonePayload | null>(null)
   useEffect(() => window.vnr.onHoverZones(setHoverPayload), [])
 
+  // Ask main to re-emit its cached HoverZonePayload whenever hover mode
+  // turns on (including initial mount when the default is on). Backstop
+  // for the static-window case: if the user toggles hover off → does
+  // something else that loses App state → toggles back on, OCR's
+  // stabilizer won't refire on a still-static target. Main keeps the last
+  // payload latched, so resync is cheap.
+  useEffect(() => {
+    if (hoverMode) window.vnr.requestHoverResync()
+  }, [hoverMode])
+
   useEffect(() => attachClickThrough(), [])
 
   useEffect(

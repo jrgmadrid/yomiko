@@ -42,6 +42,7 @@ export interface VnrApi {
   onStatus: (cb: (s: SourceStatus) => void) => () => void
   onHoverZones: (cb: (payload: HoverZonePayload) => void) => () => void
   onHoverHotkey: (cb: (key: HoverHotkey) => void) => () => void
+  requestHoverResync: () => void
   translateRegion: (req: TranslateRegionRequest) => void
   onRegionTranslation: (cb: (payload: RegionTranslationPayload) => void) => () => void
   onForceTranslation: (cb: (event: ForceTranslationEvent) => void) => () => void

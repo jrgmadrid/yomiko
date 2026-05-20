@@ -17,6 +17,7 @@ export const Channels = {
   devOpenTestVN: 'dev:open-test-vn',
   hoverZones: 'hover:zones',
   hoverHotkey: 'hover:hotkey',
+  hoverResync: 'hover:resync',
   translateRegion: 'translate:region',
   regionTranslation: 'region:translation',
   forceTranslation: 'force:translation',
