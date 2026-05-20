@@ -113,37 +113,35 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
 
   useEffect(() => {
     const offHotkey = window.vnr.onMiningHotkey(() => {
-      const s = miningStateRef.current
-      if (!s.payload) {
+      const { payload: p, hovered: h, translation: t } = miningStateRef.current
+      if (!p) {
         console.log('[mining] no frame in flight; nothing to mine')
         return
       }
+      const freshTranslation = t && t.frameId === p.frameId ? t : null
       let lineIdx: number
       let hoveredSurface: string | null = null
       let hoveredGroup: SharedWordGroup | null = null
-      if (s.hovered) {
-        lineIdx = s.hovered.zone.lineIdx
-        hoveredSurface = s.hovered.zone.surface
-        hoveredGroup = s.hovered.zone.group
-      } else if (s.translation && s.translation.frameId === s.payload.frameId) {
+      if (h) {
+        lineIdx = h.zone.lineIdx
+        hoveredSurface = h.zone.surface
+        hoveredGroup = h.zone.group
+      } else if (freshTranslation) {
         // No active hover but a fresh translation: mine the focused line
         // (Word/Reading/Meaning blank; Sentence/Translation/Picture filled).
-        lineIdx = s.translation.lineIdx
+        lineIdx = freshTranslation.lineIdx
       } else {
         console.log('[mining] no hover, no fresh translation; skipping')
         return
       }
-      const useVlm =
-        s.translation &&
-        s.translation.frameId === s.payload.frameId &&
-        s.translation.lineIdx === lineIdx
+      const vlm = freshTranslation && freshTranslation.lineIdx === lineIdx ? freshTranslation : null
       window.vnr.submitToAnki({
-        frameId: s.payload.frameId,
+        frameId: p.frameId,
         lineIdx,
         hoveredSurface,
         hoveredGroup,
-        vlmText: useVlm ? s.translation!.text : null,
-        vlmTranslation: useVlm ? s.translation!.translation : null
+        vlmText: vlm?.text ?? null,
+        vlmTranslation: vlm?.translation ?? null
       })
     })
     const offResult = window.vnr.onMiningResult((r) => {

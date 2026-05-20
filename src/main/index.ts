@@ -425,6 +425,18 @@ async function handleSubmitToAnki(req: SubmitToAnkiRequest): Promise<void> {
   }
 }
 
+async function probeAnkiConnect(): Promise<void> {
+  try {
+    const config = await getAnkiConfig()
+    const v = await ankiVersion(config.ankiConnectUrl)
+    console.log(`[anki] AnkiConnect detected (v${v}) at ${config.ankiConnectUrl}`)
+  } catch (err) {
+    console.log(
+      `[anki] not reachable on startup: ${(err as Error).message} — mining will surface errors when used`
+    )
+  }
+}
+
 function startTestVnPoll(region: SharedRegion): void {
   testVnRegion = region
   testVnLastEmit = ''
@@ -688,17 +700,7 @@ app.whenReady().then(async () => {
 
   // Best-effort connectivity probe so the user knows up-front whether Anki
   // is reachable. Fire-and-forget; the mining hotkey re-checks per-call.
-  void (async () => {
-    try {
-      const config = await getAnkiConfig()
-      const v = await ankiVersion(config.ankiConnectUrl)
-      console.log(`[anki] AnkiConnect detected (v${v}) at ${config.ankiConnectUrl}`)
-    } catch (err) {
-      console.log(
-        `[anki] not reachable on startup: ${(err as Error).message} — mining will surface errors when used`
-      )
-    }
-  })()
+  void probeAnkiConnect()
 
   manualSource = new ManualPasteSource()
   bindSource(manualSource)

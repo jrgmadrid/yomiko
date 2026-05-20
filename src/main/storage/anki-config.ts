@@ -52,16 +52,21 @@ async function pathFor(): Promise<string> {
 
 export async function getAnkiConfig(): Promise<AnkiConfig> {
   if (cached) return cached
+  const path = await pathFor()
   try {
-    const raw = await readFile(await pathFor(), 'utf8')
+    const raw = await readFile(path, 'utf8')
     const parsed = JSON.parse(raw) as Partial<AnkiConfig>
-    cached = { ...DEFAULT_CONFIG, ...parsed, fieldMap: { ...DEFAULT_CONFIG.fieldMap, ...(parsed.fieldMap ?? {}) } }
+    cached = {
+      ...DEFAULT_CONFIG,
+      ...parsed,
+      fieldMap: { ...DEFAULT_CONFIG.fieldMap, ...(parsed.fieldMap ?? {}) }
+    }
     return cached
   } catch {
     cached = DEFAULT_CONFIG
     // Write defaults on first load so the user has a file to edit.
     try {
-      await writeFile(await pathFor(), JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8')
+      await writeFile(path, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf8')
     } catch (err) {
       console.warn(`[anki-config] could not write defaults: ${(err as Error).message}`)
     }

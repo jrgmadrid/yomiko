@@ -32,7 +32,9 @@ function renderField(key: MiningField, input: MiningInput): string {
     case 'reading':
       return input.reading ?? ''
     case 'glosses':
-      return formatGlosses(input.glosses)
+      // Newline-separated. Renders cleanly in jp-mining-note's WordMeaning
+      // field; users with HTML-rich templates can override the field map.
+      return input.glosses?.join('\n') ?? ''
     case 'sentence':
       return input.sentence
     case 'sentenceTranslation':
@@ -40,14 +42,6 @@ function renderField(key: MiningField, input: MiningInput): string {
     case 'pictureHtml':
       return `<img src="${input.pictureFilename}">`
   }
-}
-
-function formatGlosses(glosses: string[] | null): string {
-  if (!glosses || glosses.length === 0) return ''
-  // Newline-separated. Simple; renders cleanly in jp-mining-note's
-  // WordMeaning field. Users with HTML-rich templates can override field
-  // mapping or post-process.
-  return glosses.join('\n')
 }
 
 export function composeNote(input: MiningInput, config: AnkiConfig): AddNotePayload {

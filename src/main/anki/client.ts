@@ -56,10 +56,10 @@ export async function ankiRequest<T>(
       signal: controller.signal
     })
   } catch (err) {
-    clearTimeout(timer)
     throw new AnkiUnreachableError(`${action} fetch failed: ${(err as Error).message}`)
+  } finally {
+    clearTimeout(timer)
   }
-  clearTimeout(timer)
 
   if (!res.ok) {
     throw new AnkiError(`${action} HTTP ${res.status} ${res.statusText}`)
