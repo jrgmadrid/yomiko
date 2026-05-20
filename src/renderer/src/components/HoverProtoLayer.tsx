@@ -60,18 +60,31 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
 
   const hoveredLineIdx = hovered?.zone.lineIdx
   const currentFrameId = payload?.frameId
+  // Most-recent (frameId, lineIdx) the user has held a hover on long enough
+  // to commit. Until set, the translation overlay does not render at all —
+  // cursor passing through zones never flashes content. Once committed, the
+  // gate `dwelledLineKey === currentLineKey` re-arms instantly on returning
+  // to the same line (cache-hit re-hovers feel zero-latency).
+  const [dwelledLineKey, setDwelledLineKey] = useState<string | null>(null)
+  const currentLineKey =
+    hovered && currentFrameId !== undefined
+      ? `${currentFrameId}:${hovered.zone.lineIdx}`
+      : null
 
   // Debounced per-line VLM trigger. Cleanup cancels the timer when the user
   // moves to a different line (or off entirely) before the dwell expires —
-  // don't bill OpenRouter for fly-over hovers. Same lineIdx across token
-  // changes leaves the deps stable, so token-to-token panning doesn't refire.
+  // don't bill OpenRouter for fly-over hovers. The timer also flips the
+  // dwelledLineKey so the overlay only mounts after a real commit.
   useEffect(() => {
     if (hoveredLineIdx === undefined || currentFrameId === undefined) return
+    const key = `${currentFrameId}:${hoveredLineIdx}`
+    if (dwelledLineKey === key) return // already dwelled here; nothing to time
     const handle = setTimeout(() => {
+      setDwelledLineKey(key)
       window.vnr.translateRegion({ frameId: currentFrameId, lineIdx: hoveredLineIdx })
     }, HOVER_TRANSLATE_DELAY_MS)
     return () => clearTimeout(handle)
-  }, [hoveredLineIdx, currentFrameId])
+  }, [hoveredLineIdx, currentFrameId, dwelledLineKey])
 
   // Receive translation results unconditionally; render gates on lineIdx
   // match so stale responses can't display under a different hover.
@@ -232,14 +245,15 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
         <div
           key={z.id}
           className={`hit pointer-events-auto absolute ${
-            debug ? 'border-2 border-emerald-400/80 bg-emerald-400/10' : ''
+            debug ? 'border-2 bg-emerald-400/10' : ''
           }`}
           style={{
             left: z.rect.x,
             top: z.rect.y,
             width: z.rect.w,
             height: z.rect.h,
-            cursor: 'help'
+            cursor: 'default',
+            ...(debug ? { borderColor: 'var(--accent-mint)' } : {})
           }}
           onMouseEnter={(e) => {
             setHovered({ zone: z, el: e.currentTarget })
@@ -249,23 +263,36 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
           onMouseLeave={() => setHovered(null)}
         />
       ))}
-      {hovered && lineRect && (
+      {hovered && lineRect && dwelledLineKey === currentLineKey && (
         <div
-          className="absolute max-w-[640px] min-w-[160px] rounded-lg border border-white/10 bg-black/85 px-3 py-2 text-sm leading-relaxed text-white shadow-2xl backdrop-blur"
-          style={overlayPosition(lineRect)}
+          className="absolute max-w-[640px] min-w-[160px] px-3 py-2 text-sm leading-relaxed"
+          style={{
+            ...overlayPosition(lineRect),
+            background: 'oklch(0.18 0.012 350 / 0.78)',
+            color: 'var(--text-primary)',
+            borderTop: '1px solid var(--surface-edge)'
+          }}
         >
           {translationFresh ? (
             <>
-              <div className="text-[11px] tracking-wide text-white/45">
+              <div
+                className="text-[11px] tracking-wide"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {translationFresh.text}
               </div>
               <div className="mt-1">{translationFresh.translation}</div>
             </>
           ) : (
             <div
-              className="vnr-shimmer h-[1.1em] rounded-md"
-              style={{ width: Math.min(360, Math.max(120, lineRect.w)) }}
-            />
+              className="vnr-pulse"
+              style={{ height: '1.1em', width: Math.min(360, Math.max(120, lineRect.w)) }}
+              aria-label="Translating"
+            >
+              <span />
+              <span />
+              <span />
+            </div>
           )}
         </div>
       )}

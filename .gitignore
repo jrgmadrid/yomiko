@@ -13,3 +13,8 @@ resources/bin/
 .env
 .env.local
 .dev.vars
+
+# tool-managed local artifacts (skills CLI, impeccable critiques, handoff briefs)
+.handoff/
+.impeccable/
+skills-lock.json

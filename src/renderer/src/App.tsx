@@ -148,20 +148,38 @@ function App(): React.JSX.Element {
   return (
     <>
       <div className="flex h-full w-full flex-col items-center justify-end p-6">
-        <div className="hit flex max-h-[85vh] max-w-[92%] flex-col gap-2 overflow-hidden rounded-xl border border-white/5 bg-black/75 px-6 py-4 shadow-2xl backdrop-blur">
-          <div className="flex shrink-0 items-center justify-between gap-3 text-[10px] uppercase tracking-widest text-white/40">
-            <div className="flex items-center gap-2">
+        <div
+          className="hit flex max-h-[85vh] max-w-[92%] flex-col gap-2 overflow-hidden px-6 pt-4 pb-3"
+          style={{
+            background: 'oklch(0.18 0.012 350 / 0.85)',
+            // Two-tone pixel-band top edge: 1px surface-edge → 1px gap → 1px
+            // accent-rose-dim. Reads as the bottom rail of a game-UI panel
+            // without enclosing the strip in a full card.
+            boxShadow:
+              'inset 0 1px 0 var(--surface-edge), inset 0 3px 0 -1px var(--accent-rose-dim)'
+          }}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 text-[11px] tracking-wide">
+            <div className="flex items-center gap-2.5" style={{ color: 'var(--text-secondary)' }}>
               <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${pipColor(status, activeSource)}`}
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: pipColor(status, activeSource) }}
               />
               <span>{statusLabel(status, activeSource)}</span>
               {hoverMode && (
-                <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-emerald-300">
+                <span
+                  className="px-1.5 py-0.5"
+                  style={{
+                    background: 'oklch(0.78 0.10 0 / 0.18)',
+                    color: 'var(--accent-rose)'
+                  }}
+                >
                   hover · ⇧ dict{hoverDebug ? ' · debug' : ''}
                 </span>
               )}
               <span
-                className={`rounded px-1.5 py-0.5 ${vlmPillClass(vlmStatus)}`}
+                className="px-1.5 py-0.5"
+                style={vlmPillStyle(vlmStatus)}
                 title={vlmPillTooltip(vlmStatus)}
               >
                 {vlmPillLabel(vlmStatus)}
@@ -170,7 +188,19 @@ function App(): React.JSX.Element {
             <button
               type="button"
               onClick={handleOpenPicker}
-              className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] tracking-widest text-white/70 hover:bg-white/10"
+              className="px-2 py-0.5 text-[11px] tracking-wide transition-colors duration-150"
+              style={{
+                color: 'var(--text-secondary)',
+                boxShadow: 'inset 0 0 0 1px var(--surface-edge)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--text-primary)'
+                e.currentTarget.style.background = 'oklch(0.22 0.015 350 / 0.6)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--text-secondary)'
+                e.currentTarget.style.background = 'transparent'
+              }}
             >
               {activeSource ? 'change source' : 'select source'}
             </button>
@@ -178,7 +208,7 @@ function App(): React.JSX.Element {
           {!hoverMode && (
             <div className="min-h-0 flex-1 overflow-y-auto">
               {lines.length === 0 ? (
-                <div className="text-base text-white/50">
+                <div className="text-base" style={{ color: 'var(--text-secondary)' }}>
                   {activeSource
                     ? `Watching ${activeSource.name} — waiting for text`
                     : 'Click "select source" to pick a VN window'}
@@ -211,10 +241,10 @@ function App(): React.JSX.Element {
 }
 
 function pipColor(status: SourceStatus, active: SharedWindowSource | null): string {
-  if (!active) return 'bg-white/30'
-  if (status === 'connected') return 'bg-emerald-400'
-  if (status === 'reconnecting') return 'bg-amber-400'
-  return 'bg-white/30'
+  if (!active) return 'var(--text-tertiary)'
+  if (status === 'connected') return 'var(--accent-mint)'
+  if (status === 'reconnecting') return 'var(--accent-amber)'
+  return 'var(--text-tertiary)'
 }
 
 function statusLabel(status: SourceStatus, active: SharedWindowSource | null): string {
@@ -227,9 +257,11 @@ function vlmPillLabel(s: VlmStatus): string {
   return 'VLM offline ⚠'
 }
 
-function vlmPillClass(s: VlmStatus): string {
-  if (s === 'ready') return 'bg-emerald-400/20 text-emerald-300'
-  return 'bg-amber-400/25 text-amber-300'
+function vlmPillStyle(s: VlmStatus): React.CSSProperties {
+  if (s === 'ready') {
+    return { background: 'oklch(0.85 0.06 165 / 0.18)', color: 'var(--accent-mint)' }
+  }
+  return { background: 'oklch(0.82 0.09 75 / 0.20)', color: 'var(--accent-amber)' }
 }
 
 function vlmPillTooltip(s: VlmStatus): string {

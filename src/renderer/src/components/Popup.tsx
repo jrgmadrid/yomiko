@@ -58,44 +58,59 @@ export function Popup({ data, anchor }: Props): React.JSX.Element | null {
   return (
     <div
       ref={popupRef}
-      className="pointer-events-none absolute z-50 min-w-[18rem] max-w-md rounded-lg border border-white/10 bg-black/95 p-4 shadow-2xl backdrop-blur-md"
+      className="vnr-panel pointer-events-none absolute z-50 min-w-[18rem] max-w-md p-4"
       style={{
         left: pos?.left ?? -9999,
         top: pos?.top ?? -9999,
-        opacity: pos ? 1 : 0
+        opacity: pos ? 1 : 0,
+        color: 'var(--text-primary)'
       }}
     >
       {data === null ? (
-        <div className="space-y-2">
-          <div className="vnr-shimmer h-7 w-24 rounded-md" />
-          <div className="vnr-shimmer h-4 w-56 rounded-md" />
-          <div className="vnr-shimmer mt-3 h-4 w-64 rounded-md" />
-          <div className="vnr-shimmer h-4 w-48 rounded-md" />
+        <div className="flex h-16 items-center" aria-label="Looking up">
+          <div className="vnr-pulse">
+            <span />
+            <span />
+            <span />
+          </div>
         </div>
       ) : (
         data.entries.slice(0, MAX_ENTRIES).map((entry, i) => (
-        <div key={entry.id} className={i > 0 ? 'mt-3 border-t border-white/10 pt-3' : ''}>
+        <div
+          key={entry.id}
+          className={i > 0 ? 'mt-3 pt-3' : ''}
+          style={i > 0 ? { borderTop: '1px solid var(--surface-edge)' } : undefined}
+        >
           <div className="flex items-baseline gap-3">
-            <span className="text-2xl font-medium text-white">{headlineForm(entry)}</span>
+            <span className="text-2xl font-medium" style={{ color: 'var(--accent-rose)' }}>
+              {headlineForm(entry)}
+            </span>
             {entry.kanji.length > 0 && entry.kana.length > 0 && (
-              <span className="text-base text-white/60">{readingsLine(entry)}</span>
+              <span className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                {readingsLine(entry)}
+              </span>
             )}
           </div>
           {i === 0 && data.chain.length > 0 && (
-            <div className="mt-1 text-xs text-amber-300/80">
+            <div className="mt-1 text-xs" style={{ color: 'var(--accent-lavender)' }}>
               {data.chain.map((s) => s.description).join(' › ')}
             </div>
           )}
           <div className="mt-2 space-y-1.5">
             {entry.senses.slice(0, MAX_SENSES).map((sense, si) => (
               <div key={si} className="text-sm leading-snug">
-                <span className="mr-1 text-white/40">{si + 1}.</span>
+                <span className="mr-1" style={{ color: 'var(--text-tertiary)' }}>
+                  {si + 1}.
+                </span>
                 {sense.partOfSpeech.length > 0 && (
-                  <span className="mr-1.5 text-xs text-cyan-300/70">
+                  <span
+                    className="mr-1.5 text-xs"
+                    style={{ color: 'var(--accent-lavender)' }}
+                  >
                     [{sense.partOfSpeech.slice(0, 2).join(', ')}]
                   </span>
                 )}
-                <span className="text-white/90">
+                <span style={{ color: 'var(--text-primary)' }}>
                   {sense.gloss.map((g) => g.text).join('; ')}
                 </span>
               </div>

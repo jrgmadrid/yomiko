@@ -25,19 +25,32 @@ export function ForceTranslationOverlay(): React.JSX.Element | null {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-12">
-      <div className="hit pointer-events-auto max-w-[640px] rounded-xl border border-white/15 bg-black/90 px-6 py-5 shadow-2xl backdrop-blur">
+      <div
+        className="vnr-panel hit pointer-events-auto max-w-[640px] px-6 py-5"
+        style={{ color: 'var(--text-primary)' }}
+      >
         {force.kind === 'start' ? (
-          <div className="space-y-3">
-            <div className="vnr-shimmer h-4 w-64 rounded-md" />
-            <div className="vnr-shimmer h-6 w-96 rounded-md" />
+          <div className="flex h-16 items-center" aria-label="Translating">
+            <div className="vnr-pulse">
+              <span />
+              <span />
+              <span />
+            </div>
           </div>
         ) : (
           <>
-            <div className="text-xs tracking-wide text-white/50">{force.text}</div>
-            <div className="mt-2 text-lg leading-relaxed text-white">{force.translation}</div>
+            <div className="text-xs tracking-wide" style={{ color: 'var(--text-secondary)' }}>
+              {force.text}
+            </div>
+            <div
+              className="mt-2 text-lg leading-relaxed"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {force.translation}
+            </div>
           </>
         )}
-        <div className="mt-4 text-[10px] uppercase tracking-widest text-white/30">
+        <div className="mt-4 text-xs" style={{ color: 'var(--text-tertiary)' }}>
           ⌘⇧T to dismiss
         </div>
       </div>
