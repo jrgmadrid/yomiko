@@ -16,8 +16,16 @@
 //
 // Protocol:
 //   client → sidecar:  "<window-id>\n"
-//   sidecar → client:  {"bounds":[x,y,w,h]} \n          (success)
-//   sidecar → client:  {"error":"window not on-screen"} \n   (recoverable)
+//   sidecar → client:  {"bounds":[x,y,w,h],"frontmost":bool} \n  (success)
+//   sidecar → client:  {"error":"window not on-screen"} \n      (recoverable)
+//
+// `frontmost` is true iff the requested window's owner PID matches the
+// owner PID of the first on-screen window at kCGWindowLayer 0 (normal app
+// windows). PID-matching, not window-ID-matching, so the user can interact
+// with auxiliary windows of the captured app (options dialog, DevTools,
+// etc.) without dropping focus. Used to suppress hover-driven translation
+// when the captured app isn't focused — e.g. the user alt-tabbed to Slack
+// and the cursor passes over the still-on-top yomiko overlay.
 //
 // Bounds are in macOS screen coordinates (DIPs / points), top-left origin —
 // same coordinate space as Electron's BrowserWindow.getBounds(). Responses
@@ -74,7 +82,17 @@ while let raw = readLine() {
         h = bounds["Height"] as? Double ?? 0
     }
 
-    writeLine(["bounds": [x, y, w, h]])
+    // First on-screen window at kCGWindowLayer 0 = the frontmost normal-level
+    // window. Higher layers (menu bar, dock, our own panel-level overlay)
+    // get filtered out; the menu-bar being clicked doesn't change frontmost.
+    // PID-matching, not window-ID-matching: an auxiliary window of the
+    // captured app (options dialog, DevTools, etc.) keeps focus assigned.
+    let frontDict = infoArr.first(where: { ($0["kCGWindowLayer"] as? Int) == 0 })
+    let reqPid = (dict["kCGWindowOwnerPID"] as? Int) ?? -1
+    let frontPid = (frontDict?["kCGWindowOwnerPID"] as? Int) ?? -2
+    let frontmost = reqPid >= 0 && reqPid == frontPid
+
+    writeLine(["bounds": [x, y, w, h], "frontmost": frontmost])
 }
 
 logErr("stdin closed; exiting")

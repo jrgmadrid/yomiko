@@ -11,8 +11,18 @@ export interface WindowBounds {
   h: number
 }
 
+/** Bounds + whether the queried window is currently the frontmost normal-
+ *  level window. `frontmost` gates hover-driven translation so a cursor
+ *  passing over the (always-on-top, click-through) overlay doesn't trigger
+ *  fetches while the user is focused on another app. */
+export interface WindowState {
+  bounds: WindowBounds
+  frontmost: boolean
+}
+
 interface SidecarOutput {
   bounds?: [number, number, number, number]
+  frontmost?: boolean
   error?: string
 }
 
@@ -31,10 +41,10 @@ export class MacWindowInfo extends JsonLineSidecar<SidecarOutput> {
   }
 
   /** Returns null if the window is no longer on-screen (e.g. minimized). */
-  async lookup(windowId: number): Promise<WindowBounds | null> {
+  async lookup(windowId: number): Promise<WindowState | null> {
     const out = await this.send(`${windowId}\n`)
     if (out.error || !out.bounds) return null
     const [x, y, w, h] = out.bounds
-    return { x, y, w, h }
+    return { bounds: { x, y, w, h }, frontmost: out.frontmost ?? false }
   }
 }

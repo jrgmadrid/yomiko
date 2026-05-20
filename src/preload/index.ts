@@ -141,6 +141,13 @@ const vnr = {
   requestHoverResync: (): void => {
     ipcRenderer.send(Channels.hoverResync)
   },
+  onSourceFocusChanged: (cb: (focused: boolean) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, focused: boolean): void => cb(focused)
+    ipcRenderer.on(Channels.sourceFocusChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(Channels.sourceFocusChanged, listener)
+    }
+  },
   translateRegion: (req: TranslateRegionRequest): void => {
     ipcRenderer.send(Channels.translateRegion, req)
   },

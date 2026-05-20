@@ -10,7 +10,7 @@ import { WindowsMediaBackend } from './ocr/windows-media'
 import { ocrResultToText, type OcrBackend, type OcrRect, type OcrResult } from './ocr/types'
 import { refineResult } from './ocr/refine'
 import { buildHoverZones, hoverPayload } from './ocr/hover-zones'
-import { MacWindowInfo, type WindowBounds } from './window-info/macos'
+import { MacWindowInfo, type WindowState } from './window-info/macos'
 import { tokenize, preloadTokenizer } from './tokenize/tokenizer'
 import { groupTokens } from './tokenize/grouping'
 import type { FrameOcrData } from './sources/types'
@@ -222,18 +222,18 @@ async function emitRealWindowHoverZones(data: FrameOcrData): Promise<void> {
   if (activeSourceWindowId === null) return
   const wi = getWindowInfo()
   if (!wi) return
-  let bounds: WindowBounds | null
+  let state: WindowState | null
   try {
-    bounds = await wi.lookup(activeSourceWindowId)
+    state = await wi.lookup(activeSourceWindowId)
   } catch (err) {
     console.error('[real-window] window-info lookup failed:', (err as Error).message)
     return
   }
-  if (!bounds) {
+  if (!state) {
     console.log(`[real-window] window ${activeSourceWindowId} not on-screen`)
     return
   }
-  await emitHoverZonesFor('real-window', data.result, data.region, bounds, data.png)
+  await emitHoverZonesFor('real-window', data.result, data.region, state.bounds, data.png)
 }
 
 // Crop the source PNG around a single OCR'd line, with generous padding
@@ -457,6 +457,54 @@ function stopTestVnPoll(): void {
   testVnLastPng = null
 }
 
+// Focus poller. The overlay is click-through and always-on-top, so the
+// cursor can wander over hover zones while the user is actually focused on
+// another app (Slack, browser, etc.). We poll the macos-window-info sidecar
+// every 500ms to check whether the captured window is still the frontmost
+// normal-level window, and emit `sourceFocusChanged` on transitions so the
+// renderer can gate the dwell timer.
+let focusPoll: NodeJS.Timeout | null = null
+let lastFocusState: boolean | null = null
+
+async function pollSourceFocus(): Promise<void> {
+  if (activeSourceWindowId === null) return
+  const wi = getWindowInfo()
+  if (!wi) return
+  let state: WindowState | null
+  try {
+    state = await wi.lookup(activeSourceWindowId)
+  } catch {
+    return
+  }
+  // Off-screen windows count as not focused. Don't false-fire on transient
+  // sidecar errors — only emit when we have a definite answer.
+  const focused = state?.frontmost ?? false
+  if (focused === lastFocusState) return
+  lastFocusState = focused
+  console.log(`[focus] source window ${focused ? 'focused' : 'unfocused'}`)
+  if (overlay && !overlay.isDestroyed()) {
+    overlay.webContents.send(Channels.sourceFocusChanged, focused)
+  }
+}
+
+function startFocusPoll(): void {
+  if (focusPoll) return
+  // Fire one probe immediately so the renderer doesn't sit at the default
+  // assumption for the full 500ms window.
+  void pollSourceFocus()
+  focusPoll = setInterval(() => {
+    void pollSourceFocus()
+  }, 500)
+}
+
+function stopFocusPoll(): void {
+  if (focusPoll) {
+    clearInterval(focusPoll)
+    focusPoll = null
+  }
+  lastFocusState = null
+}
+
 let ocrBackend: OcrBackend | null = null
 function getOrCreateOcrBackend(): OcrBackend | null {
   if (ocrBackend) return ocrBackend
@@ -564,11 +612,20 @@ app.whenReady().then(async () => {
     // Drop the cached hover payload — it belongs to the previous source.
     // A fresh OCR fire on the new source will repopulate it.
     lastHoverPayload = null
+    // Focus tracking only makes sense for real third-party windows
+    // (activeSourceWindowId is parsed from the source id; the Test VN
+    // path uses a BrowserWindow, no CGWindowID, no sidecar lookup).
+    if (activeSourceWindowId !== null) {
+      startFocusPoll()
+    } else {
+      stopFocusPoll()
+    }
   })
 
   ipcMain.on(Channels.captureStop, () => {
     clearPendingSource()
     stopTestVnPoll()
+    stopFocusPoll()
     lastHoverPayload = null
   })
 

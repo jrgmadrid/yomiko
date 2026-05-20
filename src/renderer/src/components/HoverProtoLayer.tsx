@@ -14,6 +14,11 @@ interface Props {
   debug?: boolean
   /** Latest hover-zone payload, owned by App so it survives hover-mode toggles. */
   payload: HoverZonePayload | null
+  /** True when the captured source window is the frontmost normal-level
+   *  window. When false, dwell-driven translation is suppressed and the
+   *  overlay does not render — the user is on another app and a cursor
+   *  passing over the click-through overlay should not fire fetches. */
+  sourceFocused: boolean
 }
 
 interface HoveredState {
@@ -42,7 +47,11 @@ interface StampedLookup {
 // is the planned escape hatch for confirmed-stable text.
 const HOVER_TRANSLATE_DELAY_MS = 250
 
-export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.Element | null {
+export function HoverProtoLayer({
+  debug = false,
+  payload,
+  sourceFocused
+}: Props): React.JSX.Element | null {
   const [hovered, setHovered] = useState<HoveredState | null>(null)
   const [translation, setTranslation] = useState<RegionTranslationPayload | null>(null)
   const [tokenization, setTokenization] = useState<Tokenization | null>(null)
@@ -74,8 +83,11 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
   // Debounced per-line VLM trigger. Cleanup cancels the timer when the user
   // moves to a different line (or off entirely) before the dwell expires —
   // don't bill OpenRouter for fly-over hovers. The timer also flips the
-  // dwelledLineKey so the overlay only mounts after a real commit.
+  // dwelledLineKey so the overlay only mounts after a real commit. Bails
+  // when the source window isn't focused: the user is on another app and
+  // the cursor moving across the click-through overlay shouldn't fire.
   useEffect(() => {
+    if (!sourceFocused) return
     if (hoveredLineIdx === undefined || currentFrameId === undefined) return
     const key = `${currentFrameId}:${hoveredLineIdx}`
     if (dwelledLineKey === key) return // already dwelled here; nothing to time
@@ -84,7 +96,7 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
       window.vnr.translateRegion({ frameId: currentFrameId, lineIdx: hoveredLineIdx })
     }, HOVER_TRANSLATE_DELAY_MS)
     return () => clearTimeout(handle)
-  }, [hoveredLineIdx, currentFrameId, dwelledLineKey])
+  }, [hoveredLineIdx, currentFrameId, dwelledLineKey, sourceFocused])
 
   // Receive translation results unconditionally; render gates on lineIdx
   // match so stale responses can't display under a different hover.
@@ -263,7 +275,7 @@ export function HoverProtoLayer({ debug = false, payload }: Props): React.JSX.El
           onMouseLeave={() => setHovered(null)}
         />
       ))}
-      {hovered && lineRect && dwelledLineKey === currentLineKey && (
+      {sourceFocused && hovered && lineRect && dwelledLineKey === currentLineKey && (
         <div
           className="absolute max-w-[640px] min-w-[160px] px-3 py-2 text-sm leading-relaxed"
           style={{

@@ -18,6 +18,7 @@ export const Channels = {
   hoverZones: 'hover:zones',
   hoverHotkey: 'hover:hotkey',
   hoverResync: 'hover:resync',
+  sourceFocusChanged: 'source:focus-changed',
   translateRegion: 'translate:region',
   regionTranslation: 'region:translation',
   forceTranslation: 'force:translation',

@@ -56,6 +56,14 @@ function App(): React.JSX.Element {
     return window.vnr.onVlmStatus(setVlmStatus)
   }, [])
 
+  // Whether the captured source window is the frontmost. Pushed by main's
+  // sidecar poller. Defaults to true so the Test VN path (no sidecar, no
+  // poll) doesn't suppress translation. The overlay is click-through, so
+  // without this gate the cursor wandering across hover zones triggers
+  // fetches even when the user is focused on another app.
+  const [sourceFocused, setSourceFocused] = useState(true)
+  useEffect(() => window.vnr.onSourceFocusChanged(setSourceFocused), [])
+
   // Ask main to re-emit its cached HoverZonePayload whenever hover mode
   // turns on (including initial mount when the default is on). Backstop
   // for the static-window case: if the user toggles hover off → does
@@ -228,7 +236,13 @@ function App(): React.JSX.Element {
         </div>
         {lookup && hoveredAnchor && <Popup data={lookup} anchor={hoveredAnchor} />}
       </div>
-      {hoverMode && <HoverProtoLayer debug={hoverDebug} payload={hoverPayload} />}
+      {hoverMode && (
+        <HoverProtoLayer
+          debug={hoverDebug}
+          payload={hoverPayload}
+          sourceFocused={sourceFocused}
+        />
+      )}
       <ForceTranslationOverlay />
       {pickerOpen && (
         <SourcePicker
