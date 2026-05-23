@@ -24,7 +24,7 @@ export function ForceTranslationOverlay(): React.JSX.Element | null {
   if (!force) return null
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-12">
+    <div className="pointer-events-none fixed inset-0 z-[var(--z-popover)] flex items-center justify-center p-12">
       <div
         className="vnr-panel hit pointer-events-auto max-w-[640px] px-6 py-5"
         style={{ color: 'var(--text-primary)' }}

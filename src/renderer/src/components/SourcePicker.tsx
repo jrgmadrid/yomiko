@@ -91,7 +91,7 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-8"
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-8"
       style={{ background: 'oklch(0 0 0 / 0.55)' }}
     >
       <div
@@ -107,43 +107,11 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
           </h2>
           <div className="flex gap-2">
             {step === 'region' && (
-              <button
-                type="button"
-                onClick={handleBack}
-                className="px-3 py-1.5 text-sm transition-colors duration-150"
-                style={{
-                  color: 'var(--text-secondary)',
-                  boxShadow: 'inset 0 0 0 1px var(--surface-edge)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'var(--text-primary)'
-                  e.currentTarget.style.background = 'oklch(0.22 0.015 350 / 0.6)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'var(--text-secondary)'
-                  e.currentTarget.style.background = 'transparent'
-                }}
-              >
+              <button type="button" className="vnr-btn vnr-btn--md" onClick={handleBack}>
                 ← Back
               </button>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 text-sm transition-colors duration-150"
-              style={{
-                color: 'var(--text-secondary)',
-                boxShadow: 'inset 0 0 0 1px var(--surface-edge)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = 'var(--text-primary)'
-                e.currentTarget.style.background = 'oklch(0.22 0.015 350 / 0.6)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'var(--text-secondary)'
-                e.currentTarget.style.background = 'transparent'
-              }}
-            >
+            <button type="button" className="vnr-btn vnr-btn--md" onClick={onClose}>
               Cancel
             </button>
           </div>
@@ -165,9 +133,19 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
         <div className="min-h-0 flex-1 overflow-y-auto">
           {step === 'list' &&
             (windows.length === 0 ? (
-              <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Looking for windows… (macOS will prompt for Screen Recording
-                access on first run; allow it and click Cancel + Select again.)
+              <div className="flex flex-col gap-2 py-2">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-primary)' }}>
+                  <div className="vnr-pulse" aria-label="Loading windows">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <span>Looking for windows</span>
+                </div>
+                <div className="text-xs leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+                  First run? macOS will ask for Screen Recording access.
+                  Allow it, close this dialog, then open it again.
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3 pr-1">
@@ -176,19 +154,7 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
                     key={w.id}
                     type="button"
                     onClick={() => handlePickWindow(w)}
-                    className="group flex flex-col gap-2 p-2 text-left transition-colors duration-150"
-                    style={{
-                      background: 'var(--surface-raised)',
-                      boxShadow: 'inset 0 0 0 1px var(--surface-edge)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.boxShadow =
-                        'inset 0 0 0 1px var(--accent-rose)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.boxShadow =
-                        'inset 0 0 0 1px var(--surface-edge)'
-                    }}
+                    className="vnr-tile flex flex-col gap-2 p-2 text-left"
                   >
                     <img
                       src={w.thumbnailDataUrl}

@@ -58,7 +58,7 @@ export function Popup({ data, anchor }: Props): React.JSX.Element | null {
   return (
     <div
       ref={popupRef}
-      className="vnr-panel pointer-events-none absolute z-50 min-w-[18rem] max-w-md p-4"
+      className="vnr-panel pointer-events-none absolute z-[var(--z-popover)] min-w-[18rem] max-w-md p-4"
       style={{
         left: pos?.left ?? -9999,
         top: pos?.top ?? -9999,

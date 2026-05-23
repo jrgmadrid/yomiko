@@ -5,6 +5,7 @@ import { Popup } from './components/Popup'
 import { SourcePicker } from './components/SourcePicker'
 import { HoverProtoLayer } from './components/HoverProtoLayer'
 import { ForceTranslationOverlay } from './components/ForceTranslationOverlay'
+import { HotkeyCard } from './components/HotkeyCard'
 import type { CaptureHandle } from './lib/capture'
 import type {
   HoverZonePayload,
@@ -32,7 +33,9 @@ function App(): React.JSX.Element {
   const [lookup, setLookup] = useState<SharedLookupResult | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeSource, setActiveSource] = useState<SharedWindowSource | null>(null)
+  const [hotkeysOpen, setHotkeysOpen] = useState(false)
   const captureRef = useRef<CaptureHandle | null>(null)
+  const helpButtonRef = useRef<HTMLButtonElement | null>(null)
   const [hoverMode, setHoverMode] = useState(
     () => new URLSearchParams(window.location.search).get('hover') !== 'off'
   )
@@ -174,6 +177,15 @@ function App(): React.JSX.Element {
                 style={{ background: pipColor(status, activeSource) }}
               />
               <span>{statusLabel(status, activeSource)}</span>
+              {activeSource && (
+                <span
+                  className="max-w-[220px] truncate"
+                  title={activeSource.name}
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  {activeSource.name}
+                </span>
+              )}
               {hoverMode && (
                 <span
                   className="px-1.5 py-0.5"
@@ -193,25 +205,22 @@ function App(): React.JSX.Element {
                 {vlmPillLabel(vlmStatus)}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={handleOpenPicker}
-              className="px-2 py-0.5 text-[11px] tracking-wide transition-colors duration-150"
-              style={{
-                color: 'var(--text-secondary)',
-                boxShadow: 'inset 0 0 0 1px var(--surface-edge)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = 'var(--text-primary)'
-                e.currentTarget.style.background = 'oklch(0.22 0.015 350 / 0.6)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'var(--text-secondary)'
-                e.currentTarget.style.background = 'transparent'
-              }}
-            >
-              {activeSource ? 'change source' : 'select source'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                ref={helpButtonRef}
+                type="button"
+                className="vnr-btn"
+                data-active={hotkeysOpen || undefined}
+                aria-label={hotkeysOpen ? 'Hide keyboard shortcuts' : 'Show keyboard shortcuts'}
+                aria-expanded={hotkeysOpen}
+                onClick={() => setHotkeysOpen((v) => !v)}
+              >
+                ?
+              </button>
+              <button type="button" className="vnr-btn" onClick={handleOpenPicker}>
+                {activeSource ? 'change window' : 'pick a window'}
+              </button>
+            </div>
           </div>
           {!hoverMode && (
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -219,7 +228,7 @@ function App(): React.JSX.Element {
                 <div className="text-base" style={{ color: 'var(--text-secondary)' }}>
                   {activeSource
                     ? `Watching ${activeSource.name} — waiting for text`
-                    : 'Click "select source" to pick a VN window'}
+                    : 'Click "pick a window" to start reading'}
                 </div>
               ) : (
                 lines.map((line) => (
@@ -244,6 +253,7 @@ function App(): React.JSX.Element {
         />
       )}
       <ForceTranslationOverlay />
+      {hotkeysOpen && <HotkeyCard anchor={helpButtonRef} />}
       {pickerOpen && (
         <SourcePicker
           onClose={() => setPickerOpen(false)}
@@ -262,13 +272,15 @@ function pipColor(status: SourceStatus, active: SharedWindowSource | null): stri
 }
 
 function statusLabel(status: SourceStatus, active: SharedWindowSource | null): string {
-  if (!active) return 'no source'
-  return status
+  if (!active) return 'no window'
+  if (status === 'connected') return 'watching'
+  if (status === 'reconnecting') return 'reconnecting…'
+  return 'disconnected'
 }
 
 function vlmPillLabel(s: VlmStatus): string {
-  if (s === 'ready') return 'VLM ready'
-  return 'VLM offline ⚠'
+  if (s === 'ready') return 'translation ready'
+  return 'translation offline ⚠'
 }
 
 function vlmPillStyle(s: VlmStatus): React.CSSProperties {

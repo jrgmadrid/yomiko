@@ -10,11 +10,14 @@ const NON_LOOKUPABLE_POS = new Set(['記号', 'BOS/EOS'])
 
 export function TokenLine({ groups, onHover, onLeave }: Props): React.JSX.Element {
   return (
-    <div className="text-[22px] leading-relaxed text-white/95">
+    <div
+      className="text-[22px] leading-relaxed"
+      style={{ color: 'var(--text-primary)' }}
+    >
       {groups.map((g, i) => {
         if (NON_LOOKUPABLE_POS.has(g.headPos)) {
           return (
-            <span key={i} className="text-white/50">
+            <span key={i} style={{ color: 'var(--text-tertiary)' }}>
               {g.surface}
             </span>
           )
@@ -22,7 +25,7 @@ export function TokenLine({ groups, onHover, onLeave }: Props): React.JSX.Elemen
         return (
           <span
             key={i}
-            className="hit rounded transition-colors hover:bg-white/15"
+            className="hit vnr-token-hit"
             onMouseEnter={(e) => onHover(g, e.currentTarget)}
             onMouseLeave={onLeave}
           >

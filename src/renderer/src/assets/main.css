@@ -23,6 +23,11 @@
 
   /* Motion. */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Stacking. Popovers float above the status strip; modals block the
+     whole overlay and sit above popovers. */
+  --z-popover: 50;
+  --z-modal: 100;
 }
 
 html,
@@ -101,4 +106,79 @@ body,
 
 .vnr-pulse > span:nth-child(3) {
   animation-delay: 0.36s;
+}
+
+/* Pixel-box button chrome. Default size is sm (status-strip pills); add
+   .vnr-btn--md for modal-button sizing. `data-active` flips to rose tone
+   for toggle-on state and disables hover — a toggle that's already pressed
+   shouldn't visually "lift" when you mouse back over it. */
+.vnr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--surface-edge);
+  transition:
+    color 150ms var(--ease-out-expo),
+    background-color 150ms var(--ease-out-expo),
+    box-shadow 150ms var(--ease-out-expo);
+}
+
+.vnr-btn:hover:not([data-active]):not(:disabled) {
+  color: var(--text-primary);
+  background: oklch(0.22 0.015 350 / 0.6);
+}
+
+.vnr-btn[data-active] {
+  color: var(--accent-rose);
+  box-shadow: inset 0 0 0 1px var(--accent-rose-dim);
+}
+
+.vnr-btn--md {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+/* Primary call-to-action variant — same rose tone as active, but hover *does*
+   tint the bg. CTAs invite the click; toggles already pressed don't. */
+.vnr-btn--primary {
+  color: var(--accent-rose);
+  box-shadow: inset 0 0 0 1px var(--accent-rose-dim);
+}
+
+.vnr-btn--primary:hover:not(:disabled) {
+  background: oklch(0.78 0.10 0 / 0.18);
+}
+
+.vnr-btn:disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+/* Tile chrome for thumbnail-grid items (source-picker window list). Raised
+   surface like a panel, but the hover effect is border-only — the thumbnail
+   image is the draw. */
+.vnr-tile {
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--surface-edge);
+  transition: box-shadow 150ms var(--ease-out-expo);
+}
+
+.vnr-tile:hover {
+  box-shadow: inset 0 0 0 1px var(--accent-rose);
+}
+
+/* Per-token hover affordance in the bottom-strip pill-bar (TokenLine).
+   Matches the visual weight of .vnr-btn[data-active] without the border. */
+.vnr-token-hit {
+  transition: background-color 150ms var(--ease-out-expo);
+}
+
+.vnr-token-hit:hover {
+  background: oklch(0.78 0.10 0 / 0.18);
 }

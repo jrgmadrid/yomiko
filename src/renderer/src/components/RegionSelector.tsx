@@ -48,7 +48,7 @@ export function RegionSelector({ frame, initialRegion, onConfirm, onCancel }: Pr
       ctx.fillRect(0, active.y + active.h, frame.width, frame.height - (active.y + active.h))
       ctx.restore()
 
-      ctx.strokeStyle = '#f59e0b'
+      ctx.strokeStyle = 'oklch(0.78 0.10 0)'
       ctx.lineWidth = Math.max(2, frame.width / 600)
       ctx.strokeRect(active.x, active.y, active.w, active.h)
     } else {
@@ -98,12 +98,11 @@ export function RegionSelector({ frame, initialRegion, onConfirm, onCancel }: Pr
   }
 
   return (
-    <div className="hit flex flex-col gap-3 rounded-xl border border-white/10 bg-black/90 p-4 shadow-2xl backdrop-blur">
-      <div className="text-sm text-white/70">
-        Drag a rectangle over the VN textbox. Click confirm when the
-        region matches the dialogue area.
+    <div className="hit flex flex-col gap-3">
+      <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+        Drag a rectangle over the dialogue area, then click confirm.
       </div>
-      <div className="overflow-hidden rounded-md border border-white/10">
+      <div style={{ boxShadow: 'inset 0 0 0 1px var(--surface-edge)' }}>
         <canvas
           ref={canvasRef}
           onMouseDown={onMouseDown}
@@ -113,19 +112,15 @@ export function RegionSelector({ frame, initialRegion, onConfirm, onCancel }: Pr
           className="block max-h-[60vh] w-full cursor-crosshair select-none"
         />
       </div>
-      <div className="flex justify-end gap-2 text-sm">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-white/15 px-3 py-1.5 text-white/80 hover:bg-white/5"
-        >
+      <div className="flex justify-end gap-2">
+        <button type="button" className="vnr-btn vnr-btn--md" onClick={onCancel}>
           Cancel
         </button>
         <button
           type="button"
-          onClick={handleConfirm}
+          className="vnr-btn vnr-btn--md vnr-btn--primary font-medium"
           disabled={!region}
-          className="rounded-md bg-amber-500/90 px-3 py-1.5 font-medium text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+          onClick={handleConfirm}
         >
           Confirm region
         </button>

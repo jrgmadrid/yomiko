@@ -244,28 +244,33 @@ export function HoverProtoLayer({
         payload.debugChars.map((c, i) => (
           <div
             key={`c${i}`}
-            className="absolute border border-red-400/70 bg-red-400/10"
+            className="absolute"
             style={{
               left: c.rect.x,
               top: c.rect.y,
               width: c.rect.w,
-              height: c.rect.h
+              height: c.rect.h,
+              border: '1px solid var(--accent-amber)',
+              background: 'oklch(0.82 0.09 75 / 0.10)'
             }}
           />
         ))}
       {payload.zones.map((z) => (
         <div
           key={z.id}
-          className={`hit pointer-events-auto absolute ${
-            debug ? 'border-2 bg-emerald-400/10' : ''
-          }`}
+          className="hit pointer-events-auto absolute"
           style={{
             left: z.rect.x,
             top: z.rect.y,
             width: z.rect.w,
             height: z.rect.h,
             cursor: 'default',
-            ...(debug ? { borderColor: 'var(--accent-mint)' } : {})
+            ...(debug
+              ? {
+                  border: '2px solid var(--accent-mint)',
+                  background: 'oklch(0.85 0.06 165 / 0.10)'
+                }
+              : {})
           }}
           onMouseEnter={(e) => {
             setHovered({ zone: z, el: e.currentTarget })
