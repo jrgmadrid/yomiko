@@ -141,6 +141,9 @@ const vnr = {
   requestHoverResync: (): void => {
     ipcRenderer.send(Channels.hoverResync)
   },
+  getSourceFocused: (): Promise<boolean> => {
+    return ipcRenderer.invoke(Channels.sourceFocusGet)
+  },
   onSourceFocusChanged: (cb: (focused: boolean) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, focused: boolean): void => cb(focused)
     ipcRenderer.on(Channels.sourceFocusChanged, listener)

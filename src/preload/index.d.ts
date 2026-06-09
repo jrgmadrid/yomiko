@@ -44,6 +44,7 @@ export interface VnrApi {
   onHoverZones: (cb: (payload: HoverZonePayload) => void) => () => void
   onHoverHotkey: (cb: (key: HoverHotkey) => void) => () => void
   requestHoverResync: () => void
+  getSourceFocused: () => Promise<boolean>
   onSourceFocusChanged: (cb: (focused: boolean) => void) => () => void
   translateRegion: (req: TranslateRegionRequest) => void
   onRegionTranslation: (cb: (payload: RegionTranslationPayload) => void) => () => void

@@ -19,6 +19,7 @@ export const Channels = {
   hoverHotkey: 'hover:hotkey',
   hoverResync: 'hover:resync',
   sourceFocusChanged: 'source:focus-changed',
+  sourceFocusGet: 'source:focus-get',
   translateRegion: 'translate:region',
   regionTranslation: 'region:translation',
   forceTranslation: 'force:translation',
@@ -89,14 +90,18 @@ export interface SubmitToAnkiRequest {
   vlmTranslation: string | null
 }
 
+export type MiningError =
+  | 'ANKI_UNREACHABLE'
+  | 'ANKI_ERROR'
+  | 'DUPLICATE'
+  | 'STALE_FRAME'
+  | 'NO_TARGET'
+
 /** Main → renderer: result of an Anki mining attempt. The renderer can use
  *  this to surface a brief toast or beep in the overlay. */
-export interface MiningResultPayload {
-  ok: boolean
-  noteId?: number
-  error?: 'ANKI_UNREACHABLE' | 'ANKI_ERROR' | 'DUPLICATE' | 'STALE_FRAME' | 'NO_TARGET'
-  message?: string
-}
+export type MiningResultPayload =
+  | { ok: true; noteId: number }
+  | { ok: false; error: MiningError; message: string }
 
 export type ChannelName = (typeof Channels)[keyof typeof Channels]
 

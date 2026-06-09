@@ -1,6 +1,20 @@
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import type { ChannelName } from '@shared/ipc'
+
+// Registry for the single overlay window so feature modules can send to it
+// without index.ts threading the handle everywhere. createOverlayWindow
+// registers the window it creates; senders no-op when it's gone.
+let overlay: BrowserWindow | null = null
+
+export function overlayWindow(): BrowserWindow | null {
+  return overlay && !overlay.isDestroyed() ? overlay : null
+}
+
+export function sendToOverlay(channel: ChannelName, ...args: unknown[]): void {
+  overlayWindow()?.webContents.send(channel, ...args)
+}
 
 export function createOverlayWindow(): BrowserWindow {
   const display = screen.getPrimaryDisplay()
@@ -58,5 +72,6 @@ export function createOverlayWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  overlay = win
   return win
 }
