@@ -16,15 +16,6 @@ export interface MiningInput {
   pictureFilename: string
 }
 
-const VALID_FIELDS: ReadonlySet<MiningField> = new Set<MiningField>([
-  'surface',
-  'reading',
-  'glosses',
-  'sentence',
-  'sentenceTranslation',
-  'pictureHtml'
-])
-
 function renderField(key: MiningField, input: MiningInput): string {
   switch (key) {
     case 'surface':
@@ -45,15 +36,11 @@ function renderField(key: MiningField, input: MiningInput): string {
 }
 
 export function composeNote(input: MiningInput, config: AnkiConfig): AddNotePayload {
+  // fieldMap is sanitized at load time (anki-config.ts), so every value
+  // here is a valid MiningField.
   const fields: Record<string, string> = {}
   for (const [ankiFieldName, miningKey] of Object.entries(config.fieldMap)) {
-    if (!VALID_FIELDS.has(miningKey as MiningField)) {
-      console.warn(
-        `[anki-compose] field "${ankiFieldName}" mapped to unknown key "${miningKey}"; dropping`
-      )
-      continue
-    }
-    fields[ankiFieldName] = renderField(miningKey as MiningField, input)
+    fields[ankiFieldName] = renderField(miningKey, input)
   }
   return {
     note: {
