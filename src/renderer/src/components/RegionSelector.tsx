@@ -48,7 +48,10 @@ export function RegionSelector({ frame, initialRegion, onConfirm, onCancel }: Pr
       ctx.fillRect(0, active.y + active.h, frame.width, frame.height - (active.y + active.h))
       ctx.restore()
 
-      ctx.strokeStyle = 'oklch(0.78 0.10 0)'
+      // Canvas can't consume CSS vars — resolve the accent token at draw time.
+      ctx.strokeStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue('--color-accent-rose')
+        .trim()
       ctx.lineWidth = Math.max(2, frame.width / 600)
       ctx.strokeRect(active.x, active.y, active.w, active.h)
     } else {
@@ -99,10 +102,10 @@ export function RegionSelector({ frame, initialRegion, onConfirm, onCancel }: Pr
 
   return (
     <div className="hit flex flex-col gap-3">
-      <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+      <div className="text-sm text-text-secondary">
         Drag a rectangle over the dialogue area, then click confirm.
       </div>
-      <div style={{ boxShadow: 'inset 0 0 0 1px var(--surface-edge)' }}>
+      <div className="shadow-[inset_0_0_0_1px_var(--color-surface-edge)]">
         <canvas
           ref={canvasRef}
           onMouseDown={onMouseDown}

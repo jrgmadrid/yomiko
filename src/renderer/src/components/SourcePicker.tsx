@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SharedRegion, SharedWindowSource } from '@shared/ipc'
 import { startCapture, type CaptureHandle } from '../lib/capture'
+import { Pulse } from './Pulse'
 import { RegionSelector } from './RegionSelector'
 
 interface Props {
@@ -90,19 +91,10 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-8"
-      style={{ background: 'oklch(0 0 0 / 0.55)' }}
-    >
-      <div
-        className="vnr-panel hit flex max-h-[calc(100vh-4rem)] max-w-3xl flex-col overflow-hidden p-5"
-        style={{ color: 'var(--text-primary)' }}
-      >
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/55 p-8">
+      <div className="vnr-panel hit flex max-h-[calc(100vh-4rem)] max-w-3xl flex-col overflow-hidden p-5 text-text-primary">
         <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
-          <h2
-            className="text-base font-medium tracking-wide"
-            style={{ color: 'var(--accent-rose)' }}
-          >
+          <h2 className="text-base font-medium tracking-wide text-accent-rose">
             {step === 'list' ? 'Select VN window' : `${selected?.name}`}
           </h2>
           <div className="flex gap-2">
@@ -117,32 +109,17 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
           </div>
         </div>
 
-        {error && (
-          <div
-            className="mb-3 shrink-0 px-3 py-2 text-sm"
-            style={{
-              background: 'oklch(0.82 0.09 75 / 0.15)',
-              color: 'var(--accent-amber)',
-              boxShadow: 'inset 0 0 0 1px oklch(0.82 0.09 75 / 0.3)'
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error && <div className="vnr-alert mb-3 shrink-0 px-3 py-2 text-sm">{error}</div>}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {step === 'list' &&
             (windows.length === 0 ? (
               <div className="flex flex-col gap-2 py-2">
-                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-primary)' }}>
-                  <div className="vnr-pulse" aria-label="Loading windows">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
+                <div className="flex items-center gap-2 text-sm text-text-primary">
+                  <Pulse label="Loading windows" />
                   <span>Looking for windows</span>
                 </div>
-                <div className="text-xs leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+                <div className="text-xs leading-relaxed text-text-tertiary">
                   First run? macOS will ask for Screen Recording access.
                   Allow it, close this dialog, then open it again.
                 </div>
@@ -159,15 +136,9 @@ export function SourcePicker({ onClose, onConfirmed }: Props): React.JSX.Element
                     <img
                       src={w.thumbnailDataUrl}
                       alt={w.name}
-                      className="aspect-video w-full object-contain"
-                      style={{ background: 'var(--surface-base)' }}
+                      className="aspect-video w-full bg-surface-base object-contain"
                     />
-                    <div
-                      className="line-clamp-2 text-xs"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      {w.name}
-                    </div>
+                    <div className="line-clamp-2 text-xs text-text-primary">{w.name}</div>
                   </button>
                 ))}
               </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isVerticalRect } from '@shared/geometry'
 import type {
   HoverZone,
   HoverZonePayload,
@@ -8,6 +9,7 @@ import type {
   SharedWordGroup
 } from '@shared/ipc'
 import { Popup } from './Popup'
+import { Pulse } from './Pulse'
 
 interface Props {
   /** Render visible per-character + per-token rectangles for alignment eyeballing. */
@@ -127,14 +129,16 @@ export function HoverProtoLayer({
   }, [translation])
 
   // Mining hotkey (Cmd+Shift+M) needs the live hover + translation state.
-  // useEffect subscribers see stale closures, so route through a ref that
-  // every render refreshes; the subscriber reads from the ref at fire time.
+  // useEffect subscribers see stale closures, so route through a ref
+  // refreshed after every render; the subscriber reads it at fire time.
   const miningStateRef = useRef<{
     payload: HoverZonePayload | null
     hovered: HoveredState | null
     translation: RegionTranslationPayload | null
   }>({ payload, hovered, translation })
-  miningStateRef.current = { payload, hovered, translation }
+  useEffect(() => {
+    miningStateRef.current = { payload, hovered, translation }
+  })
 
   useEffect(() => {
     const offHotkey = window.vnr.onMiningHotkey(() => {
@@ -173,7 +177,7 @@ export function HoverProtoLayer({
       if (r.ok) {
         console.log(`[mining] card added (noteId=${r.noteId})`)
       } else {
-        console.warn(`[mining] failed (${r.error ?? 'unknown'}): ${r.message ?? ''}`)
+        console.warn(`[mining] failed (${r.error}): ${r.message}`)
       }
     })
     return () => {
@@ -244,33 +248,26 @@ export function HoverProtoLayer({
         payload.debugChars.map((c, i) => (
           <div
             key={`c${i}`}
-            className="absolute"
+            className="absolute border border-accent-amber bg-accent-amber/10"
             style={{
               left: c.rect.x,
               top: c.rect.y,
               width: c.rect.w,
-              height: c.rect.h,
-              border: '1px solid var(--accent-amber)',
-              background: 'oklch(0.82 0.09 75 / 0.10)'
+              height: c.rect.h
             }}
           />
         ))}
       {payload.zones.map((z) => (
         <div
           key={z.id}
-          className="hit pointer-events-auto absolute"
+          className={`hit pointer-events-auto absolute cursor-default ${
+            debug ? 'border-2 border-accent-mint bg-accent-mint/10' : ''
+          }`}
           style={{
             left: z.rect.x,
             top: z.rect.y,
             width: z.rect.w,
-            height: z.rect.h,
-            cursor: 'default',
-            ...(debug
-              ? {
-                  border: '2px solid var(--accent-mint)',
-                  background: 'oklch(0.85 0.06 165 / 0.10)'
-                }
-              : {})
+            height: z.rect.h
           }}
           onMouseEnter={(e) => {
             setHovered({ zone: z, el: e.currentTarget })
@@ -282,34 +279,21 @@ export function HoverProtoLayer({
       ))}
       {sourceFocused && hovered && lineRect && dwelledLineKey === currentLineKey && (
         <div
-          className="absolute max-w-[640px] min-w-[160px] px-3 py-2 text-sm leading-relaxed"
-          style={{
-            ...overlayPosition(lineRect),
-            background: 'oklch(0.18 0.012 350 / 0.78)',
-            color: 'var(--text-primary)',
-            borderTop: '1px solid var(--surface-edge)'
-          }}
+          className="absolute max-w-[640px] min-w-[160px] border-t border-surface-edge bg-surface-base/78 px-3 py-2 text-sm leading-relaxed text-text-primary"
+          style={overlayPosition(lineRect)}
         >
           {translationFresh ? (
             <>
-              <div
-                className="text-[11px] tracking-wide"
-                style={{ color: 'var(--text-secondary)' }}
-              >
+              <div className="text-[11px] tracking-wide text-text-secondary">
                 {translationFresh.text}
               </div>
               <div className="mt-1">{translationFresh.translation}</div>
             </>
           ) : (
-            <div
-              className="vnr-pulse"
+            <Pulse
+              label="Translating"
               style={{ height: '1.1em', width: Math.min(360, Math.max(120, lineRect.w)) }}
-              aria-label="Translating"
-            >
-              <span />
-              <span />
-              <span />
-            </div>
+            />
           )}
         </div>
       )}
@@ -346,8 +330,7 @@ function findGroupSpanning(
 // putting the overlay to the left keeps it adjacent to the read material
 // instead of pushing it far below an entire tall column.
 function overlayPosition(lineRect: SharedScreenRect): React.CSSProperties {
-  const isVertical = lineRect.h > lineRect.w * 1.5
-  if (isVertical) {
+  if (isVerticalRect(lineRect)) {
     return {
       right: Math.max(8, window.innerWidth - lineRect.x + 8),
       top: lineRect.y

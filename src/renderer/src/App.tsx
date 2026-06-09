@@ -59,13 +59,17 @@ function App(): React.JSX.Element {
     return window.vnr.onVlmStatus(setVlmStatus)
   }, [])
 
-  // Whether the captured source window is the frontmost. Pushed by main's
-  // sidecar poller. Defaults to true so the Test VN path (no sidecar, no
-  // poll) doesn't suppress translation. The overlay is click-through, so
-  // without this gate the cursor wandering across hover zones triggers
-  // fetches even when the user is focused on another app.
+  // Whether the captured source window is the frontmost. Main owns the
+  // state (sidecar poller) and pushes transitions; we pull the current
+  // value on mount — same get+subscribe shape as the VLM status — so a
+  // remount can't strand us on a stale default. The overlay is
+  // click-through, so without this gate the cursor wandering across hover
+  // zones triggers fetches even when the user is focused on another app.
   const [sourceFocused, setSourceFocused] = useState(true)
-  useEffect(() => window.vnr.onSourceFocusChanged(setSourceFocused), [])
+  useEffect(() => {
+    void window.vnr.getSourceFocused().then(setSourceFocused)
+    return window.vnr.onSourceFocusChanged(setSourceFocused)
+  }, [])
 
   // Ask main to re-emit its cached HoverZonePayload whenever hover mode
   // turns on (including initial mount when the default is on). Backstop
@@ -159,47 +163,28 @@ function App(): React.JSX.Element {
   return (
     <>
       <div className="flex h-full w-full flex-col items-center justify-end p-6">
-        <div
-          className="hit flex max-h-[85vh] max-w-[92%] flex-col gap-2 overflow-hidden px-6 pt-4 pb-3"
-          style={{
-            background: 'oklch(0.18 0.012 350 / 0.85)',
-            // Two-tone pixel-band top edge: 1px surface-edge → 1px gap → 1px
-            // accent-rose-dim. Reads as the bottom rail of a game-UI panel
-            // without enclosing the strip in a full card.
-            boxShadow:
-              'inset 0 1px 0 var(--surface-edge), inset 0 3px 0 -1px var(--accent-rose-dim)'
-          }}
-        >
+        <div className="vnr-strip hit flex max-h-[85vh] max-w-[92%] flex-col gap-2 overflow-hidden px-6 pt-4 pb-3">
           <div className="flex shrink-0 items-center justify-between gap-3 text-[11px] tracking-wide">
-            <div className="flex items-center gap-2.5" style={{ color: 'var(--text-secondary)' }}>
+            <div className="flex items-center gap-2.5 text-text-secondary">
               <span
-                className="inline-block h-1.5 w-1.5 rounded-full"
-                style={{ background: pipColor(status, activeSource) }}
+                className={`inline-block h-1.5 w-1.5 rounded-full ${pipColor(status, activeSource)}`}
               />
               <span>{statusLabel(status, activeSource)}</span>
               {activeSource && (
                 <span
-                  className="max-w-[220px] truncate"
+                  className="max-w-[220px] truncate text-text-tertiary"
                   title={activeSource.name}
-                  style={{ color: 'var(--text-tertiary)' }}
                 >
                   {activeSource.name}
                 </span>
               )}
               {hoverMode && (
-                <span
-                  className="px-1.5 py-0.5"
-                  style={{
-                    background: 'oklch(0.78 0.10 0 / 0.18)',
-                    color: 'var(--accent-rose)'
-                  }}
-                >
+                <span className="bg-accent-rose-tint px-1.5 py-0.5 text-accent-rose">
                   hover · ⇧ dict{hoverDebug ? ' · debug' : ''}
                 </span>
               )}
               <span
-                className="px-1.5 py-0.5"
-                style={vlmPillStyle(vlmStatus)}
+                className={`px-1.5 py-0.5 ${vlmPillClass(vlmStatus)}`}
                 title={vlmPillTooltip(vlmStatus)}
               >
                 {vlmPillLabel(vlmStatus)}
@@ -225,7 +210,7 @@ function App(): React.JSX.Element {
           {!hoverMode && (
             <div className="min-h-0 flex-1 overflow-y-auto">
               {lines.length === 0 ? (
-                <div className="text-base" style={{ color: 'var(--text-secondary)' }}>
+                <div className="text-base text-text-secondary">
                   {activeSource
                     ? `Watching ${activeSource.name} — waiting for text`
                     : 'Click "pick a window" to start reading'}
@@ -265,10 +250,10 @@ function App(): React.JSX.Element {
 }
 
 function pipColor(status: SourceStatus, active: SharedWindowSource | null): string {
-  if (!active) return 'var(--text-tertiary)'
-  if (status === 'connected') return 'var(--accent-mint)'
-  if (status === 'reconnecting') return 'var(--accent-amber)'
-  return 'var(--text-tertiary)'
+  if (!active) return 'bg-text-tertiary'
+  if (status === 'connected') return 'bg-accent-mint'
+  if (status === 'reconnecting') return 'bg-accent-amber'
+  return 'bg-text-tertiary'
 }
 
 function statusLabel(status: SourceStatus, active: SharedWindowSource | null): string {
@@ -283,11 +268,9 @@ function vlmPillLabel(s: VlmStatus): string {
   return 'translation offline ⚠'
 }
 
-function vlmPillStyle(s: VlmStatus): React.CSSProperties {
-  if (s === 'ready') {
-    return { background: 'oklch(0.85 0.06 165 / 0.18)', color: 'var(--accent-mint)' }
-  }
-  return { background: 'oklch(0.82 0.09 75 / 0.20)', color: 'var(--accent-amber)' }
+function vlmPillClass(s: VlmStatus): string {
+  if (s === 'ready') return 'bg-accent-mint-tint text-accent-mint'
+  return 'bg-accent-amber-tint text-accent-amber'
 }
 
 function vlmPillTooltip(s: VlmStatus): string {

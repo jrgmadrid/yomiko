@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { ForceTranslationEvent } from '@shared/ipc'
+import { Pulse } from './Pulse'
 
 // Centered overlay for the Cmd+Shift+T full-frame VLM translate. Lives at
 // the App level (outside HoverProtoLayer) because it shows regardless of
 // hover mode — the whole point is "Vision returned nothing and there's no
-// hover target." Three states: loading shimmer, content card, hidden.
+// hover target." Three states: loading pulse, content card, hidden.
 // Dismissal is hotkey-only; tracking dismiss state in main keeps the
 // renderer and main in sync.
 export function ForceTranslationOverlay(): React.JSX.Element | null {
@@ -25,34 +26,20 @@ export function ForceTranslationOverlay(): React.JSX.Element | null {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[var(--z-popover)] flex items-center justify-center p-12">
-      <div
-        className="vnr-panel hit pointer-events-auto max-w-[640px] px-6 py-5"
-        style={{ color: 'var(--text-primary)' }}
-      >
+      <div className="vnr-panel hit pointer-events-auto max-w-[640px] px-6 py-5 text-text-primary">
         {force.kind === 'start' ? (
-          <div className="flex h-16 items-center" aria-label="Translating">
-            <div className="vnr-pulse">
-              <span />
-              <span />
-              <span />
-            </div>
+          <div className="flex h-16 items-center">
+            <Pulse label="Translating" />
           </div>
         ) : (
           <>
-            <div className="text-xs tracking-wide" style={{ color: 'var(--text-secondary)' }}>
-              {force.text}
-            </div>
-            <div
-              className="mt-2 text-lg leading-relaxed"
-              style={{ color: 'var(--text-primary)' }}
-            >
+            <div className="text-xs tracking-wide text-text-secondary">{force.text}</div>
+            <div className="mt-2 text-lg leading-relaxed text-text-primary">
               {force.translation}
             </div>
           </>
         )}
-        <div className="mt-4 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-          ⌘⇧T to dismiss
-        </div>
+        <div className="mt-4 text-xs text-text-tertiary">⌘⇧T to dismiss</div>
       </div>
     </div>
   )

@@ -41,29 +41,22 @@ export function HotkeyCard({ anchor }: Props): React.JSX.Element | null {
   const el = anchor.current
   if (!el) return null
 
-  const r = el.getBoundingClientRect()
+  const anchorRect = el.getBoundingClientRect()
   // Right-align card's right edge with the button's; sit 8px above the top.
-  const right = Math.max(8, window.innerWidth - r.right)
-  const bottom = Math.max(8, window.innerHeight - r.top + 8)
+  const right = Math.max(8, window.innerWidth - anchorRect.right)
+  const bottom = Math.max(8, window.innerHeight - anchorRect.top + 8)
 
   return (
     <div
-      className="vnr-panel hit fixed z-[var(--z-popover)] px-4 py-3"
-      style={{ right, bottom, color: 'var(--text-primary)', minWidth: '18rem' }}
+      className="vnr-panel hit fixed z-[var(--z-popover)] min-w-72 px-4 py-3 text-text-primary"
+      style={{ right, bottom }}
     >
-      <div
-        className="mb-2 text-[10px] tracking-[0.2em] uppercase"
-        style={{ color: 'var(--accent-rose)' }}
-      >
-        Shortcuts
-      </div>
+      <div className="mb-2 text-[10px] tracking-[0.2em] uppercase text-accent-rose">Shortcuts</div>
       <div className="flex flex-col gap-1.5 text-[12px]">
-        {ROWS.map((r) => (
-          <div key={r.key} className="flex items-baseline justify-between gap-6">
-            <span style={{ color: 'var(--text-secondary)' }}>{r.label}</span>
-            <span className="tracking-wide tabular-nums" style={{ color: 'var(--text-primary)' }}>
-              {r.key}
-            </span>
+        {ROWS.map((row) => (
+          <div key={row.key} className="flex items-baseline justify-between gap-6">
+            <span className="text-text-secondary">{row.label}</span>
+            <span className="tracking-wide tabular-nums text-text-primary">{row.key}</span>
           </div>
         ))}
       </div>

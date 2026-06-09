@@ -2,28 +2,41 @@
 
 /* Design tokens. See DESIGN.md at repo root for the language these encode.
    Warm-tinted-dark surfaces with a faint rose hue distinguish the overlay
-   from the generic translucent-glass dark-card monoculture. */
-:root {
+   from the generic translucent-glass dark-card monoculture.
+
+   Declared via @theme so Tailwind generates matching utilities
+   (text-text-secondary, bg-surface-base, bg-accent-rose-tint, …) — color
+   styling lives in class names, not inline style objects. The variables are
+   also emitted on :root, so the .vnr-* chrome below uses them directly. */
+@theme {
   /* Surface tiers — tinted dark, never pure black. */
-  --surface-base: oklch(0.18 0.012 350);
-  --surface-raised: oklch(0.22 0.015 350);
-  --surface-edge: oklch(0.32 0.02 350);
+  --color-surface-base: oklch(0.18 0.012 350);
+  --color-surface-raised: oklch(0.22 0.015 350);
+  --color-surface-edge: oklch(0.32 0.02 350);
 
   /* Text tiers — cream/ivory at three opacities, period. */
-  --text-primary: oklch(0.95 0.015 80 / 0.92);
-  --text-secondary: oklch(0.95 0.015 80 / 0.58);
-  --text-tertiary: oklch(0.95 0.015 80 / 0.32);
+  --color-text-primary: oklch(0.95 0.015 80 / 0.92);
+  --color-text-secondary: oklch(0.95 0.015 80 / 0.58);
+  --color-text-tertiary: oklch(0.95 0.015 80 / 0.32);
 
   /* Pastel-shifted accents. */
-  --accent-rose: oklch(0.78 0.10 0);
-  --accent-rose-dim: oklch(0.55 0.08 0 / 0.4);
-  --accent-mint: oklch(0.85 0.06 165);
-  --accent-amber: oklch(0.82 0.09 75);
-  --accent-lavender: oklch(0.75 0.08 300);
+  --color-accent-rose: oklch(0.78 0.1 0);
+  --color-accent-rose-dim: oklch(0.55 0.08 0 / 0.4);
+  --color-accent-mint: oklch(0.85 0.06 165);
+  --color-accent-amber: oklch(0.82 0.09 75);
+  --color-accent-lavender: oklch(0.75 0.08 300);
+
+  /* Accent tints — the sanctioned wash alphas for pill/hover backgrounds.
+     One canonical tint per accent; don't invent new alphas inline. */
+  --color-accent-rose-tint: oklch(0.78 0.1 0 / 0.18);
+  --color-accent-mint-tint: oklch(0.85 0.06 165 / 0.18);
+  --color-accent-amber-tint: oklch(0.82 0.09 75 / 0.2);
 
   /* Motion. */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
 
+:root {
   /* Stacking. Popovers float above the status strip; modals block the
      whole overlay and sit above popovers. */
   --z-popover: 50;
@@ -45,20 +58,20 @@ body,
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 /* Pixel-box panel chrome. Three inset layers paint the double-border:
-     1. inset 1px --surface-edge — outer line.
-     2. inset 1px --surface-base (rows 2-3, so a 2px gap) — space between
+     1. inset 1px surface-edge — outer line.
+     2. inset 1px surface-base (rows 2-3, so a 2px gap) — space between
         outer and inner lines.
-     3. inset 1px --accent-rose-dim — inner line.
+     3. inset 1px accent-rose-dim — inner line.
    `clip-path` notches the corners by 4px on each axis so the panel reads
    as an octagonal game-UI shape, not a rectangle. No drop shadow, no
    outer outline — both would be clipped, and the double border carries
    the edge against any captured background. */
 .vnr-panel {
-  background: var(--surface-base);
+  background: var(--color-surface-base);
   clip-path: polygon(
     4px 0,
     calc(100% - 4px) 0,
@@ -70,16 +83,36 @@ body,
     0 4px
   );
   box-shadow:
-    inset 0 0 0 1px var(--surface-edge),
-    inset 0 0 0 3px var(--surface-base),
-    inset 0 0 0 4px var(--accent-rose-dim);
+    inset 0 0 0 1px var(--color-surface-edge),
+    inset 0 0 0 3px var(--color-surface-base),
+    inset 0 0 0 4px var(--color-accent-rose-dim);
 }
 
-/* Pulsing-dot loading affordance. Replaces the gradient shimmer band; the
+/* Status-strip chrome: tinted backdrop so pills stay legible against bright
+   captured pixels, plus a two-tone pixel-band top edge (1px surface-edge →
+   1px gap → 1px accent-rose-dim). Reads as the bottom rail of a game-UI
+   panel without enclosing the strip in a full card. */
+.vnr-strip {
+  background: color-mix(in oklab, var(--color-surface-base) 85%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--color-surface-edge),
+    inset 0 3px 0 -1px var(--color-accent-rose-dim);
+}
+
+/* Warning callout (source-picker errors). Amber wash + amber inset ring. */
+.vnr-alert {
+  background: color-mix(in oklab, var(--color-accent-amber) 15%, transparent);
+  color: var(--color-accent-amber);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-accent-amber) 30%, transparent);
+}
+
+/* Pulsing-dot loading affordance (rendered by the Pulse component). The
    three dots pulse opacity (no movement) on a staggered cadence. Used
    anywhere a translation/lookup is in flight. */
 @keyframes vnr-pulse {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     opacity: 0.25;
   }
   40% {
@@ -96,7 +129,7 @@ body,
 .vnr-pulse > span {
   width: 0.45em;
   height: 0.45em;
-  background: var(--accent-rose);
+  background: var(--color-accent-rose);
   animation: vnr-pulse 1.4s var(--ease-out-expo) infinite;
 }
 
@@ -120,9 +153,9 @@ body,
   font-family: inherit;
   font-size: 11px;
   letter-spacing: 0.05em;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   background: transparent;
-  box-shadow: inset 0 0 0 1px var(--surface-edge);
+  box-shadow: inset 0 0 0 1px var(--color-surface-edge);
   transition:
     color 150ms var(--ease-out-expo),
     background-color 150ms var(--ease-out-expo),
@@ -130,13 +163,13 @@ body,
 }
 
 .vnr-btn:hover:not([data-active]):not(:disabled) {
-  color: var(--text-primary);
-  background: oklch(0.22 0.015 350 / 0.6);
+  color: var(--color-text-primary);
+  background: color-mix(in oklab, var(--color-surface-raised) 60%, transparent);
 }
 
 .vnr-btn[data-active] {
-  color: var(--accent-rose);
-  box-shadow: inset 0 0 0 1px var(--accent-rose-dim);
+  color: var(--color-accent-rose);
+  box-shadow: inset 0 0 0 1px var(--color-accent-rose-dim);
 }
 
 .vnr-btn--md {
@@ -147,16 +180,16 @@ body,
 /* Primary call-to-action variant — same rose tone as active, but hover *does*
    tint the bg. CTAs invite the click; toggles already pressed don't. */
 .vnr-btn--primary {
-  color: var(--accent-rose);
-  box-shadow: inset 0 0 0 1px var(--accent-rose-dim);
+  color: var(--color-accent-rose);
+  box-shadow: inset 0 0 0 1px var(--color-accent-rose-dim);
 }
 
 .vnr-btn--primary:hover:not(:disabled) {
-  background: oklch(0.78 0.10 0 / 0.18);
+  background: var(--color-accent-rose-tint);
 }
 
 .vnr-btn:disabled {
-  color: var(--text-tertiary);
+  color: var(--color-text-tertiary);
   cursor: not-allowed;
 }
 
@@ -164,13 +197,13 @@ body,
    surface like a panel, but the hover effect is border-only — the thumbnail
    image is the draw. */
 .vnr-tile {
-  background: var(--surface-raised);
-  box-shadow: inset 0 0 0 1px var(--surface-edge);
+  background: var(--color-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--color-surface-edge);
   transition: box-shadow 150ms var(--ease-out-expo);
 }
 
 .vnr-tile:hover {
-  box-shadow: inset 0 0 0 1px var(--accent-rose);
+  box-shadow: inset 0 0 0 1px var(--color-accent-rose);
 }
 
 /* Per-token hover affordance in the bottom-strip pill-bar (TokenLine).
@@ -180,5 +213,5 @@ body,
 }
 
 .vnr-token-hit:hover {
-  background: oklch(0.78 0.10 0 / 0.18);
+  background: var(--color-accent-rose-tint);
 }
